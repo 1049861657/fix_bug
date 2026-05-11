@@ -10,21 +10,27 @@ console = Console()
 REPORT_DIR = Path("reports")
 
 REPORT_TEMPLATE = """\
-fix-bug 自动修复报告
-生成时间: {timestamp}
-{'=' * 60}
+# fix-bug 自动修复报告
 
-【分支】
-{branch_name}
+**生成时间**: {timestamp}
 
-【PR 地址】
+## 分支
+
+`{branch_name}`
+
+## PR 地址
+
 {pr_url}
 
-【测试结果】
+## 测试结果
+
 {test_result}
 
-【错误摘要】
+## 错误摘要
+
+```
 {error_summary}
+```
 """
 
 
@@ -37,13 +43,13 @@ def notify_all(
     REPORT_DIR.mkdir(exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    report_path = REPORT_DIR / f"report-{timestamp}.txt"
+    report_path = REPORT_DIR / f"report-{timestamp}.md"
 
     content = REPORT_TEMPLATE.format(
         timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         branch_name=branch_name,
-        pr_url=pr_url or "（未创建）",
-        test_result="通过 ✓" if test_passed else "失败 ✗",
+        pr_url=pr_url if pr_url else "（未创建）",
+        test_result="✅ 通过" if test_passed else "❌ 失败",
         error_summary=error_summary,
     )
 

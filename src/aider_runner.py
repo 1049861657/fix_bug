@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -58,14 +59,16 @@ class AiderRunner:
             "--no-pretty",
         ]
 
+        # 通过环境变量传递 API 凭证，避免 aider 版本间 CLI 参数差异
+        env = dict(os.environ)
         if self.api_base:
-            cmd += ["--openai-api-base", self.api_base]
+            env["OPENAI_API_BASE"] = self.api_base
         if self.api_key:
-            cmd += ["--openai-api-key", self.api_key]
+            env["OPENAI_API_KEY"] = self.api_key
 
         console.print("[cyan]正在启动 Aider...[/cyan]")
 
-        result = subprocess.run(cmd, cwd=self.repo_path)
+        result = subprocess.run(cmd, cwd=self.repo_path, env=env)
 
         if result.returncode == 0:
             console.print("[green]✓ Aider 修复完成[/green]")
