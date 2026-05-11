@@ -85,6 +85,17 @@ def run(message: str | None, log_file: str | None, config: str, dry_run: bool) -
     tester = TestRunner(cfg.git.repo_path, cfg.aider.test_cmd)
     test_passed, _ = tester.run()
 
+    if not test_passed:
+        console.print("[red]测试未通过，中止推送和 PR 创建，已保留分支供排查[/red]")
+        notify_all(
+            branch_name=branch_name,
+            pr_url="",
+            error_summary=error_message[:300],
+            test_passed=False,
+        )
+        console.print(Rule("[bold red]流程终止[/bold red]"))
+        raise SystemExit(1)
+
     pr_url = ""
     if dry_run:
         console.print("[yellow]dry-run 模式，跳过推送和 PR 创建[/yellow]")

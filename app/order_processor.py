@@ -1,4 +1,4 @@
-from tests.utils import clamp, format_currency, percentage_of
+from app.utils import clamp, format_currency, percentage_of
 
 
 class OrderProcessor:
