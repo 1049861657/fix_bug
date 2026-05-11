@@ -52,20 +52,38 @@ def _run_aider(prompt: str, repo_path: Path, model: str, test_cmd: str, env: dic
         "--message", prompt,
         "--test-cmd", test_cmd,
         "--auto-test",
-        "--yes",
-        "--no-pretty",
+            "--yes",
+            "--no-pretty",
+            "--model-metadata-file", self._write_model_metadata(),
     ]
     result = subprocess.run(cmd, cwd=repo_path, env=env)
     return result.returncode == 0
 
 
 class AiderRunner:
-    def __init__(self, repo_path: str, model: str, test_cmd: str, api_base: str = "", api_key: str = ""):
+    def __init__(self, repo_path: str, model: str, test_cmd: str, api_base: str = "", api_key: str = "", context_tokens: int = 200000):
         self.repo_path = Path(repo_path).resolve()
         self.model = model
         self.test_cmd = test_cmd
         self.api_base = api_base
         self.api_key = api_key
+        self.context_tokens = context_tokens
+
+    def _write_model_metadata(self) -> str:
+        import json, tempfile
+        meta = {
+            self.model: {
+                "max_tokens": self.context_tokens,
+                "max_input_tokens": self.context_tokens,
+                "max_output_tokens": 8096,
+                "input_cost_per_token": 0,
+                "output_cost_per_token": 0,
+            }
+        }
+        f = tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False)
+        json.dump(meta, f)
+        f.close()
+        return f.name
 
     def _build_env(self) -> dict:
         env = {k: v for k, v in os.environ.items() if not k.startswith("AIDER_")}

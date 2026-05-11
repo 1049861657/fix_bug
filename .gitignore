@@ -20,6 +20,7 @@ build/
 
 # 本工具输出
 reports/
+*.log
 
 # Aider 生成文件
 .aider*

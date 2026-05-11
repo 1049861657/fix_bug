@@ -16,6 +16,7 @@ class AiderConfig:
     test_cmd: str = "pytest tests/ -x -q"
     api_base: str = field(default_factory=lambda: os.getenv("FIX_BUG_API_BASE", ""))
     api_key: str = field(default_factory=lambda: os.getenv("FIX_BUG_API_KEY", ""))
+    context_tokens: int = 200000
 
 
 @dataclass
@@ -58,6 +59,7 @@ def load_config(path: str | Path = "config.yaml") -> AppConfig:
             test_cmd=aider_raw.get("test_cmd", "pytest tests/ -x -q"),
             api_base=os.getenv(aider_raw.get("api_base_env", "FIX_BUG_API_BASE"), ""),
             api_key=os.getenv(aider_raw.get("api_key_env", "FIX_BUG_API_KEY"), ""),
+            context_tokens=int(aider_raw.get("context_tokens", 200000)),
         ),
         git=GitConfig(
             repo_path=git_raw.get("repo_path", "."),

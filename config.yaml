@@ -7,6 +7,7 @@ aider:
   model: "openai/claude-opus-4.7"
   api_base_env: "FIX_BUG_API_BASE"
   api_key_env: "FIX_BUG_API_KEY"
+  context_tokens: 200000        # claude-opus-4.7 的上下文窗口大小
   test_cmd: "pytest tests/ -x -q"
 
 github:

@@ -70,6 +70,7 @@ def run(message: str | None, log_file: str | None, config: str, dry_run: bool) -
         test_cmd=cfg.aider.test_cmd,
         api_base=cfg.aider.api_base,
         api_key=cfg.aider.api_key,
+        context_tokens=cfg.aider.context_tokens,
     )
     fix_ok = aider.run(error_message)
 
