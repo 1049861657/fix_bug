@@ -34,6 +34,10 @@ cat error.log | fix-bug run
 fix-bug run -f error.log --dry-run
 ```
 
+## 演示
+
+![运行效果](docs/demo.png)
+
 ## 流程说明
 
 ```

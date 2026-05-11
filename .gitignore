@@ -20,3 +20,6 @@ build/
 
 # 本工具输出
 reports/
+
+# Aider 生成文件
+.aider*

@@ -60,7 +60,8 @@ class AiderRunner:
         ]
 
         # 通过环境变量传递 API 凭证，避免 aider 版本间 CLI 参数差异
-        env = dict(os.environ)
+        # 清除所有 AIDER_* 变量，防止与 aider 自身的环境变量解析逻辑冲突
+        env = {k: v for k, v in os.environ.items() if not k.startswith("AIDER_")}
         if self.api_base:
             env["OPENAI_API_BASE"] = self.api_base
         if self.api_key:

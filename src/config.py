@@ -14,8 +14,8 @@ load_dotenv()
 class AiderConfig:
     model: str = "openai/claude-opus-4.7"
     test_cmd: str = "pytest tests/ -x -q"
-    api_base: str = field(default_factory=lambda: os.getenv("AIDER_API_BASE", ""))
-    api_key: str = field(default_factory=lambda: os.getenv("AIDER_API_KEY", ""))
+    api_base: str = field(default_factory=lambda: os.getenv("FIX_BUG_API_BASE", ""))
+    api_key: str = field(default_factory=lambda: os.getenv("FIX_BUG_API_KEY", ""))
 
 
 @dataclass
@@ -56,8 +56,8 @@ def load_config(path: str | Path = "config.yaml") -> AppConfig:
         aider=AiderConfig(
             model=aider_raw.get("model", "openai/claude-opus-4.7"),
             test_cmd=aider_raw.get("test_cmd", "pytest tests/ -x -q"),
-            api_base=os.getenv(aider_raw.get("api_base_env", "AIDER_API_BASE"), ""),
-            api_key=os.getenv(aider_raw.get("api_key_env", "AIDER_API_KEY"), ""),
+            api_base=os.getenv(aider_raw.get("api_base_env", "FIX_BUG_API_BASE"), ""),
+            api_key=os.getenv(aider_raw.get("api_key_env", "FIX_BUG_API_KEY"), ""),
         ),
         git=GitConfig(
             repo_path=git_raw.get("repo_path", "."),
