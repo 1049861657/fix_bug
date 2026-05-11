@@ -10,23 +10,53 @@ from rich.panel import Panel
 
 console = Console()
 
-AIDER_PROMPT_TEMPLATE = """\
-以下是来自生产环境的报错信息，请分析根本原因并修复代码中的 Bug。
-修复时只修改必要的文件，保持代码风格一致。
+PROMPT_GEN_TEST = """\
+以下是来自生产环境的报错信息：
 
 === 报错信息 ===
 {error_message}
 =================
 
-请直接修复，无需解释。
+请完成以下任务：
+1. 分析报错，找到对应的源码文件
+2. 在 tests/ 目录下创建或补充一个 pytest 测试文件，写一个能复现此 bug 的**失败测试**
+3. 不要修复 bug，只写测试
+
+测试文件命名规范：test_<被测模块名>.py
+"""
+
+PROMPT_FIX_BUG = """\
+以下是来自生产环境的报错信息：
+
+=== 报错信息 ===
+{error_message}
+=================
+
+tests/ 目录下已有一个能复现此 bug 的失败测试。
+请修复源码中的 Bug，使所有测试通过。
+只修改必要的源码文件，不要修改测试文件，保持代码风格一致。
 """
 
 
 def _check_aider() -> None:
     if shutil.which("aider") is None:
         console.print("[red]✗ 未找到 aider 命令，请先安装：[/red]")
-        console.print("    uv tool install aider-chat")
+        console.print("    uv tool install aider-chat --python 3.13")
         raise SystemExit(1)
+
+
+def _run_aider(prompt: str, repo_path: Path, model: str, test_cmd: str, env: dict) -> bool:
+    cmd = [
+        "aider",
+        "--model", model,
+        "--message", prompt,
+        "--test-cmd", test_cmd,
+        "--auto-test",
+        "--yes",
+        "--no-pretty",
+    ]
+    result = subprocess.run(cmd, cwd=repo_path, env=env)
+    return result.returncode == 0
 
 
 class AiderRunner:
@@ -37,9 +67,17 @@ class AiderRunner:
         self.api_base = api_base
         self.api_key = api_key
 
+    def _build_env(self) -> dict:
+        env = {k: v for k, v in os.environ.items() if not k.startswith("AIDER_")}
+        if self.api_base:
+            env["OPENAI_API_BASE"] = self.api_base
+        if self.api_key:
+            env["OPENAI_API_KEY"] = self.api_key
+        return env
+
     def run(self, error_message: str) -> bool:
         _check_aider()
-        prompt = AIDER_PROMPT_TEMPLATE.format(error_message=error_message)
+        env = self._build_env()
 
         console.print(Panel(
             f"模型: [bold]{self.model}[/bold]\n"
@@ -49,31 +87,20 @@ class AiderRunner:
             expand=False,
         ))
 
-        cmd = [
-            "aider",
-            "--model", self.model,
-            "--message", prompt,
-            "--test-cmd", self.test_cmd,
-            "--auto-test",
-            "--yes",
-            "--no-pretty",
-        ]
+        # ── 阶段一：生成复现 bug 的失败测试 ──────────────────────
+        console.print("[cyan]阶段一：生成复现 bug 的测试...[/cyan]")
+        prompt_test = PROMPT_GEN_TEST.format(error_message=error_message)
+        ok = _run_aider(prompt_test, self.repo_path, self.model, self.test_cmd, env)
+        if not ok:
+            console.print("[yellow]⚠ 测试生成阶段异常，继续尝试修复...[/yellow]")
 
-        # 通过环境变量传递 API 凭证，避免 aider 版本间 CLI 参数差异
-        # 清除所有 AIDER_* 变量，防止与 aider 自身的环境变量解析逻辑冲突
-        env = {k: v for k, v in os.environ.items() if not k.startswith("AIDER_")}
-        if self.api_base:
-            env["OPENAI_API_BASE"] = self.api_base
-        if self.api_key:
-            env["OPENAI_API_KEY"] = self.api_key
+        # ── 阶段二：修复 bug 直到测试通过 ────────────────────────
+        console.print("[cyan]阶段二：修复 Bug...[/cyan]")
+        prompt_fix = PROMPT_FIX_BUG.format(error_message=error_message)
+        ok = _run_aider(prompt_fix, self.repo_path, self.model, self.test_cmd, env)
 
-        console.print("[cyan]正在启动 Aider...[/cyan]")
-
-        result = subprocess.run(cmd, cwd=self.repo_path, env=env)
-
-        if result.returncode == 0:
+        if ok:
             console.print("[green]✓ Aider 修复完成[/green]")
-            return True
-
-        console.print(f"[red]✗ Aider 退出码: {result.returncode}[/red]")
-        return False
+        else:
+            console.print(f"[red]✗ Aider 修复失败[/red]")
+        return ok
