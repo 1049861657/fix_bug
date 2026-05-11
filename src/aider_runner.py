@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 from rich.console import Console
@@ -45,23 +47,38 @@ def _check_aider() -> None:
         raise SystemExit(1)
 
 
-def _run_aider(prompt: str, repo_path: Path, model: str, test_cmd: str, env: dict) -> bool:
+def _run_aider(
+    prompt: str,
+    repo_path: Path,
+    model: str,
+    test_cmd: str,
+    env: dict,
+    metadata_file: str,
+) -> bool:
     cmd = [
         "aider",
         "--model", model,
         "--message", prompt,
         "--test-cmd", test_cmd,
         "--auto-test",
-            "--yes",
-            "--no-pretty",
-            "--model-metadata-file", self._write_model_metadata(),
+        "--yes",
+        "--no-pretty",
+        "--model-metadata-file", metadata_file,
     ]
     result = subprocess.run(cmd, cwd=repo_path, env=env)
     return result.returncode == 0
 
 
 class AiderRunner:
-    def __init__(self, repo_path: str, model: str, test_cmd: str, api_base: str = "", api_key: str = "", context_tokens: int = 200000):
+    def __init__(
+        self,
+        repo_path: str,
+        model: str,
+        test_cmd: str,
+        api_base: str = "",
+        api_key: str = "",
+        context_tokens: int = 200000,
+    ):
         self.repo_path = Path(repo_path).resolve()
         self.model = model
         self.test_cmd = test_cmd
@@ -70,7 +87,6 @@ class AiderRunner:
         self.context_tokens = context_tokens
 
     def _write_model_metadata(self) -> str:
-        import json, tempfile
         meta = {
             self.model: {
                 "max_tokens": self.context_tokens,
@@ -96,6 +112,7 @@ class AiderRunner:
     def run(self, error_message: str) -> bool:
         _check_aider()
         env = self._build_env()
+        metadata_file = self._write_model_metadata()   # 在 run() 里生成，传给 _run_aider
 
         console.print(Panel(
             f"模型: [bold]{self.model}[/bold]\n"
@@ -108,17 +125,17 @@ class AiderRunner:
         # ── 阶段一：生成复现 bug 的失败测试 ──────────────────────
         console.print("[cyan]阶段一：生成复现 bug 的测试...[/cyan]")
         prompt_test = PROMPT_GEN_TEST.format(error_message=error_message)
-        ok = _run_aider(prompt_test, self.repo_path, self.model, self.test_cmd, env)
+        ok = _run_aider(prompt_test, self.repo_path, self.model, self.test_cmd, env, metadata_file)
         if not ok:
             console.print("[yellow]⚠ 测试生成阶段异常，继续尝试修复...[/yellow]")
 
         # ── 阶段二：修复 bug 直到测试通过 ────────────────────────
         console.print("[cyan]阶段二：修复 Bug...[/cyan]")
         prompt_fix = PROMPT_FIX_BUG.format(error_message=error_message)
-        ok = _run_aider(prompt_fix, self.repo_path, self.model, self.test_cmd, env)
+        ok = _run_aider(prompt_fix, self.repo_path, self.model, self.test_cmd, env, metadata_file)
 
         if ok:
             console.print("[green]✓ Aider 修复完成[/green]")
         else:
-            console.print(f"[red]✗ Aider 修复失败[/red]")
+            console.print("[red]✗ Aider 修复失败[/red]")
         return ok
