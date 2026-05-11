@@ -63,6 +63,7 @@ def _run_aider(
         "--auto-test",
         "--yes",
         "--no-pretty",
+        "--edit-format", "diff",
         "--model-metadata-file", metadata_file,
     ]
     result = subprocess.run(cmd, cwd=repo_path, env=env)
