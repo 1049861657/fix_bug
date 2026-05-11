@@ -1,6 +1,8 @@
 def add(a, b):
-    return a - b          # bug: 应该是加法，写成了减法
+    return a + b
 
 
 def divide(a, b):
-    return a / b          # bug: 没有除零检查
+    if b == 0:
+        raise ZeroDivisionError("除数不能为零")
+    return a / b
