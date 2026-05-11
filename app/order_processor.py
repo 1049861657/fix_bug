@@ -18,7 +18,7 @@ class OrderProcessor:
 
     def apply_discount(self, subtotal: float, discount_pct: float) -> float:
         """discount_pct=10 表示打九折"""
-        return subtotal + (subtotal * discount_pct / 100)   # bug: 应该减去折扣额而非加上
+        return subtotal - (subtotal * discount_pct / 100)
 
     def calculate_tax(self, amount: float) -> float:
         return round(amount * self.TAX_RATE, 2)
