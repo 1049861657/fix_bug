@@ -31,7 +31,6 @@ class OrderProcessor:
 
     def checkout_summary(self, discount_pct: float = 0) -> dict:
         subtotal = self.get_subtotal()
-        # 折扣率限制在 0~100 之间
         safe_discount = clamp(discount_pct, 0, 100)
         final = self.final_price(safe_discount)
         if discount_pct > 0 and final >= subtotal:

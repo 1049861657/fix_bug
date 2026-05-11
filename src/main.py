@@ -91,16 +91,19 @@ def run(message: str | None, log_file: str | None, config: str, dry_run: bool) -
     else:
         # ── Step 4: 推送分支 ──────────────────────────────────────
         console.print(Rule("Step 4 · 推送分支"))
-        if git.has_changes():
+        if git.has_commits_ahead():
             git.push_branch()
         else:
-            console.print("[yellow]Aider 未产生任何文件变更[/yellow]")
+            console.print("[yellow]分支无新提交，跳过推送[/yellow]")
 
         # ── Step 5: 创建 PR ───────────────────────────────────────
         console.print(Rule("Step 5 · 创建 PR"))
         if cfg.github.token and cfg.github.repo_slug:
-            pr_creator = PRCreator(cfg.github.token, cfg.github.repo_slug)
-            pr_url = pr_creator.create(branch_name, cfg.git.base_branch, error_message)
+            try:
+                pr_creator = PRCreator(cfg.github.token, cfg.github.repo_slug)
+                pr_url = pr_creator.create(branch_name, cfg.git.base_branch, error_message)
+            except Exception as exc:
+                console.print(f"[yellow]PR 创建失败（可手动创建）: {exc}[/yellow]")
         else:
             console.print("[yellow]GitHub token 或 repo_slug 未配置，跳过 PR 创建[/yellow]")
 

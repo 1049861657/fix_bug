@@ -46,8 +46,14 @@ class GitManager:
         )
         console.print(f"[green]✓ 分支已推送[/green]")
 
-    def has_changes(self) -> bool:
-        return self.repo.is_dirty(untracked_files=True)
+    def has_commits_ahead(self) -> bool:
+        """当前分支是否有领先于远程基准分支的提交（aider auto-commit 后工作区是干净的）"""
+        try:
+            base = self.repo.commit(f"{self.remote}/{self.base_branch}")
+            ahead = list(self.repo.iter_commits(f"{self.remote}/{self.base_branch}..HEAD"))
+            return len(ahead) > 0
+        except Exception:
+            return self.repo.is_dirty(untracked_files=True)
 
     def checkout_base(self) -> None:
         self.repo.heads[self.base_branch].checkout()
