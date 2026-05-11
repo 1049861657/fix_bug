@@ -10,7 +10,7 @@ from rich.rule import Rule
 
 from src.aider_runner import AiderRunner
 from src.config import load_config
-from src.git_manager import GitManager
+from src.git_manager import GitManager, ensure_repo
 from src.notifier import notify_all
 from src.pr_creator import PRCreator
 from src.test_runner import TestRunner
@@ -55,6 +55,7 @@ def run(message: str | None, log_file: str | None, config: str, dry_run: bool) -
 
     # ── Step 1: 创建修复分支 ──────────────────────────────────────
     console.print(Rule("Step 1 · 创建分支"))
+    ensure_repo(cfg.git.repo_path, cfg.git.repo_url)
     git = GitManager(cfg.git.repo_path, cfg.git.remote, cfg.git.base_branch)
     if dry_run:
         branch_name = "fix/dry-run"

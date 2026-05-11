@@ -21,9 +21,20 @@ class AiderConfig:
 
 @dataclass
 class GitConfig:
-    repo_path: str = "."
+    repo_url: str = ""
+    clone_base_dir: str = r"D:\fixRepo"
     remote: str = "origin"
     base_branch: str = "main"
+
+    @property
+    def repo_path(self) -> str:
+        """从 repo_url 提取项目名，拼成本地路径。"""
+        if not self.repo_url:
+            return "."
+        name = self.repo_url.rstrip("/").split("/")[-1]
+        if name.endswith(".git"):
+            name = name[:-4]
+        return str(Path(self.clone_base_dir) / name)
 
 
 @dataclass
@@ -62,7 +73,8 @@ def load_config(path: str | Path = "config.yaml") -> AppConfig:
             context_tokens=int(aider_raw.get("context_tokens", 200000)),
         ),
         git=GitConfig(
-            repo_path=git_raw.get("repo_path", "."),
+            repo_url=git_raw.get("repo_url", ""),
+            clone_base_dir=git_raw.get("clone_base_dir", r"D:\fixRepo"),
             remote=git_raw.get("remote", "origin"),
             base_branch=git_raw.get("base_branch", "main"),
         ),

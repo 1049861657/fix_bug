@@ -1,52 +1,54 @@
-from app.utils import clamp, format_currency, percentage_of
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+from app.inventory import Inventory
+from app.pricing import PricingEngine
+
+
+@dataclass
+class OrderItem:
+    sku: str
+    quantity: int
+
+
+@dataclass
+class Order:
+    order_id: str
+    items: list[OrderItem] = field(default_factory=list)
+    total: float = 0.0
+    status: str = "pending"
 
 
 class OrderProcessor:
-    TAX_RATE = 0.08
+    def __init__(self, inventory: Inventory, pricing: PricingEngine):
+        self.inventory = inventory
+        self.pricing = pricing
 
-    def __init__(self):
-        self.orders = []
+    def create_order(self, order_id: str, items: list[dict]) -> Order:
+        """
+        items: [{"sku": "A001", "quantity": 3}, ...]
+        """
+        order = Order(order_id=order_id)
 
-    def add_order(self, item: str, price: float, quantity: int) -> None:
-        self.orders.append({"item": item, "price": price, "quantity": quantity})
+        for item in items:
+            sku = item["sku"]
+            qty = item["quantity"]
 
-    def get_subtotal(self) -> float:
-        total = 0
-        for order in self.orders:
-            total += order["price"] * order["quantity"]
-        return total
+            if not self.inventory.is_available(sku, qty):
+                raise AssertionError(
+                    f"Order {order_id} rejected: SKU '{sku}' qty={qty} unavailable, "
+                    f"but stock shows {self.inventory.get_stock(sku)} units"
+                )
 
-    def apply_discount(self, subtotal: float, discount_pct: float) -> float:
-        """discount_pct=10 表示打九折"""
-        return subtotal - (subtotal * discount_pct / 100)
+            line_total = self.pricing.calc_line_total(sku, qty)
+            order.items.append(OrderItem(sku=sku, quantity=qty))
+            order.total += line_total
 
-    def calculate_tax(self, amount: float) -> float:
-        return round(amount * self.TAX_RATE, 2)
+        order.total = round(order.total, 2)
+        order.status = "confirmed"
 
-    def final_price(self, discount_pct: float = 0) -> float:
-        subtotal = self.get_subtotal()
-        discounted = self.apply_discount(subtotal, discount_pct) if discount_pct else subtotal
-        tax = self.calculate_tax(discounted)
-        return round(discounted + tax, 2)
+        for item in order.items:
+            self.inventory.deduct(item.sku, item.quantity)
 
-    def checkout_summary(self, discount_pct: float = 0) -> dict:
-        subtotal = self.get_subtotal()
-        safe_discount = clamp(discount_pct, 0, 100)
-        final = self.final_price(safe_discount)
-        if discount_pct > 0 and final >= subtotal:
-            raise AssertionError(
-                f"结算异常：折扣后价格 {final:.2f} 不低于原价 {subtotal:.2f}，"
-                f"discount_pct={discount_pct}"
-            )
-        discount_ratio = percentage_of(subtotal - final, subtotal)
-        return {
-            "subtotal": format_currency(subtotal),
-            "final": format_currency(final),
-            "discount_pct": safe_discount,
-            "actual_discount_ratio": f"{discount_ratio:.1f}%",
-        }
-
-    def most_expensive_item(self) -> dict:
-        if not self.orders:
-            raise ValueError("订单列表为空")
-        return min(self.orders, key=lambda x: x["price"])  # bug: min 应为 max
+        return order

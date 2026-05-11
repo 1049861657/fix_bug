@@ -9,6 +9,21 @@ from rich.console import Console
 console = Console()
 
 
+def ensure_repo(repo_path: str, repo_url: str) -> None:
+    """若本地路径不存在则从 repo_url clone；已存在则跳过。"""
+    path = Path(repo_path).resolve()
+    if path.exists() and (path / ".git").exists():
+        return
+    if not repo_url:
+        raise ValueError(
+            f"本地路径 {path} 不存在，且未配置 git.repo_url，无法自动 clone。"
+        )
+    console.print(f"[cyan]目录不存在，正在 clone: {repo_url} → {path}[/cyan]")
+    path.mkdir(parents=True, exist_ok=True)
+    Repo.clone_from(repo_url, path)
+    console.print(f"[green]✓ Clone 完成[/green]")
+
+
 class GitManager:
     def __init__(self, repo_path: str, remote: str, base_branch: str):
         self.repo = Repo(Path(repo_path).resolve())
