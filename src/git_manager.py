@@ -24,7 +24,15 @@ class GitManager:
         console.print(f"[cyan]正在拉取最新代码 ({self.base_branch})...[/cyan]")
         origin.fetch()
 
-        base_ref = f"{self.remote}/{self.base_branch}"
+        # 优先用远程分支作为起点，远程不存在时回退到本地分支
+        remote_ref = f"{self.remote}/{self.base_branch}"
+        try:
+            base_ref = self.repo.commit(remote_ref)
+            console.print(f"[dim]基准: {remote_ref}[/dim]")
+        except Exception:
+            console.print(f"[yellow]远程 {remote_ref} 不存在，回退到本地 {self.base_branch}[/yellow]")
+            base_ref = self.repo.heads[self.base_branch].commit
+
         new_branch = self.repo.create_head(self.branch_name, base_ref)
         new_branch.checkout()
 

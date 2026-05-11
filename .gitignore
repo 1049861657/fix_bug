@@ -1,7 +1,22 @@
+# 密钥
 .env
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Python
 .venv/
 __pycache__/
-*.pyc
-reports/
+*.py[cod]
+*.pyo
 *.egg-info/
 dist/
+build/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# 本工具输出
+reports/

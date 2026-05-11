@@ -1,17 +1,16 @@
 git:
   repo_path: "."           # 目标仓库本地路径（绝对或相对均可）
   remote: "origin"
-  base_branch: "main"
+  base_branch: "master"
 
 aider:
   model: "openai/claude-opus-4.7"
   api_base_env: "AIDER_API_BASE"
   api_key_env: "AIDER_API_KEY"
   test_cmd: "pytest tests/ -x -q"
-  max_retries: 3
 
 github:
-  repo_slug: "owner/repo"       # 替换为你的 GitHub 仓库，如 "alice/my-app"
-  token_env: "GITHUB_TOKEN"     # 从环境变量读取 token
+  repo_slug: "1049861657/fix_bug"
+  token_env: "GITHUB_TOKEN"
 
 # notify: 暂不配置，修复结果自动生成到 reports/ 目录下的 txt 文件
