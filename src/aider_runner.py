@@ -12,31 +12,24 @@ from rich.panel import Panel
 
 console = Console()
 
-PROMPT_GEN_TEST = """\
-以下是来自生产环境的报错信息：
+PROMPT_FIX = """\
+你是一个自动 Bug 修复助手。以下是来自生产环境的运行时报错：
 
 === 报错信息 ===
 {error_message}
 =================
 
-请完成以下任务：
-1. 分析报错，找到对应的源码文件
-2. 在 tests/ 目录下创建或补充一个 pytest 测试文件，写一个能复现此 bug 的**失败测试**
-3. 不要修复 bug，只写测试
+请按顺序完成以下步骤：
 
-测试文件命名规范：test_<被测模块名>.py
-"""
+1. **定位根因**：根据报错堆栈，找到出错的源码文件和具体行，解释错误原因
+2. **补充测试**：在 tests/ 目录创建或修改 pytest 测试以稳定复现此 bug；\
+测试必须在修复前失败、修复后通过
+3. **修复源码**：以最小改动修复 bug，不引入新的测试失败
 
-PROMPT_FIX_BUG = """\
-以下是来自生产环境的报错信息：
-
-=== 报错信息 ===
-{error_message}
-=================
-
-tests/ 目录下已有一个能复现此 bug 的失败测试。
-请修复源码中的 Bug，使所有测试通过。
-只修改必要的源码文件，不要修改测试文件，保持代码风格一致。
+限制：
+- 不得修改测试命令、pytest 配置或 CI 相关文件
+- 不得为了让测试通过而删除或跳过已有测试
+- 保持原有代码风格
 """
 
 
@@ -51,21 +44,22 @@ def _run_aider(
     prompt: str,
     repo_path: Path,
     model: str,
-    test_cmd: str,
     env: dict,
     metadata_file: str,
+    test_cmd: str = "",
+    auto_test: bool = False,
 ) -> bool:
     cmd = [
         "aider",
         "--model", model,
         "--message", prompt,
-        "--test-cmd", test_cmd,
-        "--auto-test",
         "--yes",
         "--no-pretty",
         "--edit-format", "diff",
         "--model-metadata-file", metadata_file,
     ]
+    if test_cmd and auto_test:
+        cmd += ["--test-cmd", test_cmd, "--auto-test"]
     result = subprocess.run(cmd, cwd=repo_path, env=env)
     return result.returncode == 0
 
@@ -113,7 +107,7 @@ class AiderRunner:
     def run(self, error_message: str) -> bool:
         _check_aider()
         env = self._build_env()
-        metadata_file = self._write_model_metadata()   # 在 run() 里生成，传给 _run_aider
+        metadata_file = self._write_model_metadata()
 
         console.print(Panel(
             f"模型: [bold]{self.model}[/bold]\n"
@@ -123,20 +117,15 @@ class AiderRunner:
             expand=False,
         ))
 
-        # ── 阶段一：生成复现 bug 的失败测试 ──────────────────────
-        console.print("[cyan]阶段一：生成复现 bug 的测试...[/cyan]")
-        prompt_test = PROMPT_GEN_TEST.format(error_message=error_message)
-        ok = _run_aider(prompt_test, self.repo_path, self.model, self.test_cmd, env, metadata_file)
-        if not ok:
-            console.print("[yellow]⚠ 测试生成阶段异常，继续尝试修复...[/yellow]")
-
-        # ── 阶段二：修复 bug 直到测试通过 ────────────────────────
-        console.print("[cyan]阶段二：修复 Bug...[/cyan]")
-        prompt_fix = PROMPT_FIX_BUG.format(error_message=error_message)
-        ok = _run_aider(prompt_fix, self.repo_path, self.model, self.test_cmd, env, metadata_file)
+        console.print("[cyan]正在启动 Aider（分析报错 → 补充测试 → 修复代码）...[/cyan]")
+        prompt = PROMPT_FIX.format(error_message=error_message)
+        ok = _run_aider(
+            prompt, self.repo_path, self.model, env, metadata_file,
+            test_cmd=self.test_cmd, auto_test=True,
+        )
 
         if ok:
             console.print("[green]✓ Aider 修复完成[/green]")
         else:
-            console.print("[red]✗ Aider 修复失败[/red]")
+            console.print("[red]✗ Aider 未能完成修复，流程终止[/red]")
         return ok

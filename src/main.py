@@ -24,6 +24,33 @@ def cli() -> None:
 
 
 @cli.command()
+@click.argument("test_file", type=click.Path(exists=True))
+@click.option("--config", "-c", default="config.yaml", show_default=True, help="配置文件路径")
+def verify(test_file: str, config: str) -> None:
+    """将外部测试文件复制到目标仓库 tests/ 并运行，验证 bug 是否已修复。"""
+    import shutil
+
+    cfg = load_config(config)
+    ensure_repo(cfg.git.repo_path, cfg.git.repo_url)
+
+    repo_tests_dir = Path(cfg.git.repo_path) / "tests"
+    repo_tests_dir.mkdir(exist_ok=True)
+
+    dest = repo_tests_dir / Path(test_file).name
+    shutil.copy2(test_file, dest)
+    console.print(f"[cyan]已复制测试文件: {dest}[/cyan]")
+
+    tester = TestRunner(cfg.git.repo_path, f"pytest tests/{Path(test_file).name} -v")
+    passed, _ = tester.run()
+
+    if passed:
+        console.print("[green]✓ 所有测试通过，Bug 已修复[/green]")
+    else:
+        console.print("[red]✗ 测试未通过，Bug 仍存在[/red]")
+        raise SystemExit(1)
+
+
+@cli.command()
 @click.option("--message", "-m", help="直接传入报错信息（字符串）")
 @click.option("--log-file", "-f", type=click.Path(exists=True), help="报错日志文件路径")
 @click.option("--config", "-c", default="config.yaml", show_default=True, help="配置文件路径")
