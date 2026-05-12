@@ -18,6 +18,38 @@ from src.test_runner import TestRunner
 console = Console()
 
 
+def filter_stack(error_message: str, app_prefix: str) -> str:
+    """过滤堆栈中的框架噪音行，只保留业务代码帧和异常头。
+
+    支持 Java（`\tat ...`）和 Python（`  File "..."` in site-packages）。
+    app_prefix 为空时直接返回原文。
+    """
+    if not app_prefix:
+        return error_message
+
+    kept, total_at, removed_at = [], 0, 0
+    for line in error_message.splitlines():
+        stripped = line.lstrip()
+        # Java: at com.xxx / at java.base（框架行以 \tat 开头）
+        if stripped.startswith("at "):
+            total_at += 1
+            if app_prefix in line:
+                kept.append(line)
+            else:
+                removed_at += 1
+                continue
+        # Python: File ".../site-packages/..." 框架行
+        elif stripped.startswith('File "') and "site-packages" in line and app_prefix not in line:
+            removed_at += 1
+            continue
+        else:
+            kept.append(line)
+
+    if removed_at:
+        kept.append(f"    ... ({removed_at}/{total_at} 框架堆栈帧已省略)")
+    return "\n".join(kept)
+
+
 @click.group()
 def cli() -> None:
     """fix-bug — 自动 Bug 修复工具"""
@@ -72,6 +104,7 @@ def run(message: str | None, log_file: str | None, config: str, dry_run: bool) -
         raise SystemExit(1)
 
     cfg = load_config(config)
+    error_message = filter_stack(error_message, cfg.aider.stack_filter)
 
     console.print(Rule("[bold blue]fix-bug 自动修复流程启动[/bold blue]"))
     console.print(Panel(
@@ -96,6 +129,9 @@ def run(message: str | None, log_file: str | None, config: str, dry_run: bool) -
         repo_path=cfg.git.repo_path,
         model=cfg.aider.model,
         test_cmd=cfg.aider.test_cmd,
+        test_framework=cfg.aider.test_framework,
+        test_dir=cfg.aider.test_dir,
+        cmd_dir=cfg.aider.cmd_dir,
         api_base=cfg.aider.api_base,
         api_key=cfg.aider.api_key,
         context_tokens=cfg.aider.context_tokens,
@@ -110,7 +146,7 @@ def run(message: str | None, log_file: str | None, config: str, dry_run: bool) -
 
     # ── Step 3: 再次验证测试 ──────────────────────────────────────
     console.print(Rule("Step 3 · 验证测试"))
-    tester = TestRunner(cfg.git.repo_path, cfg.aider.test_cmd)
+    tester = TestRunner(cfg.git.repo_path, aider.test_cmd)
     test_passed, _ = tester.run()
 
     if not test_passed:

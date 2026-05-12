@@ -14,6 +14,10 @@ load_dotenv()
 class AiderConfig:
     model: str = "openai/claude-opus-4.7"
     test_cmd: str = "pytest tests/ -x -q"
+    test_framework: str = "pytest"
+    test_dir: str = "tests/"
+    cmd_dir: str = ""
+    stack_filter: str = ""  # 应用包名前缀，过滤堆栈噪音（如 com.example 或 app.）
     api_base: str = field(default_factory=lambda: os.getenv("FIX_BUG_API_BASE", ""))
     api_key: str = field(default_factory=lambda: os.getenv("FIX_BUG_API_KEY", ""))
     context_tokens: int = 200000
@@ -62,6 +66,10 @@ def load_config(path: str | Path = "config.yaml") -> AppConfig:
         aider=AiderConfig(
             model=aider_raw.get("model", "openai/claude-opus-4.7"),
             test_cmd=aider_raw.get("test_cmd", "pytest tests/ -x -q"),
+            test_framework=aider_raw.get("test_framework", "pytest"),
+            test_dir=aider_raw.get("test_dir", "tests/"),
+            cmd_dir=aider_raw.get("cmd_dir", ""),
+            stack_filter=aider_raw.get("stack_filter", ""),
             api_base=os.getenv(aider_raw.get("api_base_env", "FIX_BUG_API_BASE"), ""),
             api_key=os.getenv(aider_raw.get("api_key_env", "FIX_BUG_API_KEY"), ""),
             context_tokens=int(aider_raw.get("context_tokens", 200000)),

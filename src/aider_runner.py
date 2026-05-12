@@ -22,12 +22,12 @@ PROMPT_FIX = """\
 请按顺序完成以下步骤：
 
 1. **定位根因**：根据报错堆栈，找到出错的源码文件和具体行，解释错误原因
-2. **补充测试**：在 tests/ 目录创建或修改 pytest 测试以稳定复现此 bug；\
+2. **补充测试**：在 {test_dir} 目录创建或修改 {test_framework} 测试以稳定复现此 bug；\
 测试必须在修复前失败、修复后通过
 3. **修复源码**：以最小改动修复 bug，不引入新的测试失败
 
 限制：
-- 不得修改测试命令、pytest 配置或 CI 相关文件
+- 不得修改测试命令、{test_framework} 配置或 CI 相关文件
 - 不得为了让测试通过而删除或跳过已有测试
 - 保持原有代码风格
 """
@@ -70,16 +70,24 @@ class AiderRunner:
         repo_path: str,
         model: str,
         test_cmd: str,
+        test_framework: str = "pytest",
+        test_dir: str = "tests/",
+        cmd_dir: str = "",
         api_base: str = "",
         api_key: str = "",
         context_tokens: int = 200000,
     ):
         self.repo_path = Path(repo_path).resolve()
         self.model = model
-        self.test_cmd = test_cmd
+        self.test_framework = test_framework
+        self.test_dir = test_dir
         self.api_base = api_base
         self.api_key = api_key
         self.context_tokens = context_tokens
+        if cmd_dir:
+            self.test_cmd = f"cd {cmd_dir} && {test_cmd}"
+        else:
+            self.test_cmd = test_cmd
 
     def _write_model_metadata(self) -> str:
         meta = {
@@ -118,7 +126,11 @@ class AiderRunner:
         ))
 
         console.print("[cyan]正在启动 Aider（分析报错 → 补充测试 → 修复代码）...[/cyan]")
-        prompt = PROMPT_FIX.format(error_message=error_message)
+        prompt = PROMPT_FIX.format(
+            error_message=error_message,
+            test_framework=self.test_framework,
+            test_dir=self.test_dir,
+        )
         ok = _run_aider(
             prompt, self.repo_path, self.model, env, metadata_file,
             test_cmd=self.test_cmd, auto_test=True,
