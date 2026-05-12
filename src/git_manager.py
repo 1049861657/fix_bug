@@ -3,10 +3,18 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
+import os
+
 from git import Repo
 from rich.console import Console
 
 console = Console()
+
+
+def _proxy_env() -> dict:
+    """透传系统代理环境变量给 git 子进程。"""
+    proxy_keys = ["HTTP_PROXY", "HTTPS_PROXY", "http_proxy", "https_proxy", "NO_PROXY", "no_proxy"]
+    return {k: os.environ[k] for k in proxy_keys if k in os.environ}
 
 
 def ensure_repo(repo_path: str, repo_url: str) -> None:
@@ -56,9 +64,10 @@ class GitManager:
 
     def push_branch(self) -> None:
         console.print(f"[cyan]正在推送分支 {self.branch_name}...[/cyan]")
-        self.repo.remotes[self.remote].push(
-            refspec=f"refs/heads/{self.branch_name}:refs/heads/{self.branch_name}",
-        )
+        with self.repo.git.custom_environment(**_proxy_env()):
+            self.repo.remotes[self.remote].push(
+                refspec=f"refs/heads/{self.branch_name}:refs/heads/{self.branch_name}",
+            )
         console.print(f"[green]✓ 分支已推送[/green]")
 
     def has_commits_ahead(self) -> bool:

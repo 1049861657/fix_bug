@@ -1,5 +1,5 @@
 git:
-  repo_url: "https://github.com/1049861657/fix_bug"
+  repo_url: "https://github.com/1049861657/bug_python"
   clone_base_dir: "D:\\fixRepo"
   remote: "origin"
   base_branch: "master"
@@ -12,5 +12,4 @@ aider:
   context_tokens: 200000
 
 github:
-  repo_slug: "1049861657/fix_bug"
   token_env: "GITHUB_TOKEN"

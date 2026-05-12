@@ -110,14 +110,14 @@ def run(message: str | None, log_file: str | None, config: str, dry_run: bool) -
 
         # ── Step 5: 创建 PR ───────────────────────────────────────
         console.print(Rule("Step 5 · 创建 PR"))
-        if cfg.github.token and cfg.github.repo_slug:
+        if cfg.git.github_token and cfg.git.repo_slug:
             try:
-                pr_creator = PRCreator(cfg.github.token, cfg.github.repo_slug)
+                pr_creator = PRCreator(cfg.git.github_token, cfg.git.repo_slug)
                 pr_url = pr_creator.create(branch_name, cfg.git.base_branch, error_message)
             except Exception as exc:
                 console.print(f"[yellow]PR 创建失败（可手动创建）: {exc}[/yellow]")
         else:
-            console.print("[yellow]GitHub token 或 repo_slug 未配置，跳过 PR 创建[/yellow]")
+            console.print("[yellow]GitHub token 未配置，跳过 PR 创建[/yellow]")
 
     # ── Step 6: 生成报告 ──────────────────────────────────────────
     console.print(Rule("Step 6 · 生成报告"))

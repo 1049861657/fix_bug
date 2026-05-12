@@ -25,29 +25,25 @@ class GitConfig:
     clone_base_dir: str = r"D:\fixRepo"
     remote: str = "origin"
     base_branch: str = "main"
+    github_token: str = field(default_factory=lambda: os.getenv("GITHUB_TOKEN", ""))
 
     @property
     def repo_path(self) -> str:
-        """从 repo_url 提取项目名，拼成本地路径。"""
         if not self.repo_url:
             return "."
-        name = self.repo_url.rstrip("/").split("/")[-1]
-        if name.endswith(".git"):
-            name = name[:-4]
+        name = self.repo_url.rstrip("/").removesuffix(".git").split("/")[-1]
         return str(Path(self.clone_base_dir) / name)
 
-
-@dataclass
-class GitHubConfig:
-    repo_slug: str = ""
-    token: str = field(default_factory=lambda: os.getenv("GITHUB_TOKEN", ""))
+    @property
+    def repo_slug(self) -> str:
+        parts = self.repo_url.rstrip("/").removesuffix(".git").split("/")
+        return f"{parts[-2]}/{parts[-1]}" if len(parts) >= 2 else ""
 
 
 @dataclass
 class AppConfig:
     aider: AiderConfig = field(default_factory=AiderConfig)
     git: GitConfig = field(default_factory=GitConfig)
-    github: GitHubConfig = field(default_factory=GitHubConfig)
 
 
 def load_config(path: str | Path = "config.yaml") -> AppConfig:
@@ -60,9 +56,7 @@ def load_config(path: str | Path = "config.yaml") -> AppConfig:
 
     aider_raw = raw.get("aider", {})
     git_raw = raw.get("git", {})
-    github_raw = raw.get("github", {})
-
-    github_token = os.getenv(github_raw.get("token_env", "GITHUB_TOKEN"), "")
+    github_token_env = raw.get("github", {}).get("token_env", "GITHUB_TOKEN")
 
     return AppConfig(
         aider=AiderConfig(
@@ -77,9 +71,6 @@ def load_config(path: str | Path = "config.yaml") -> AppConfig:
             clone_base_dir=git_raw.get("clone_base_dir", r"D:\fixRepo"),
             remote=git_raw.get("remote", "origin"),
             base_branch=git_raw.get("base_branch", "main"),
-        ),
-        github=GitHubConfig(
-            repo_slug=github_raw.get("repo_slug", ""),
-            token=github_token,
+            github_token=os.getenv(github_token_env, ""),
         ),
     )

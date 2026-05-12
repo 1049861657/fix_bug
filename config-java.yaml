@@ -12,5 +12,4 @@ aider:
   context_tokens: 200000
 
 github:
-  repo_slug: "your-org/your-java-app"
   token_env: "GITHUB_TOKEN"
