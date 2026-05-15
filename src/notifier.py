@@ -7,7 +7,7 @@ from rich.console import Console
 
 console = Console()
 
-REPORT_DIR = Path("reports")
+REPORT_BASE = Path("reports")
 
 REPORT_TEMPLATE = """\
 # fix-bug 自动修复报告
@@ -39,11 +39,13 @@ def notify_all(
     pr_url: str,
     error_summary: str,
     test_passed: bool,
+    project_name: str = "default",
 ) -> None:
-    REPORT_DIR.mkdir(exist_ok=True)
+    report_dir = REPORT_BASE / project_name
+    report_dir.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    report_path = REPORT_DIR / f"report-{timestamp}.md"
+    report_path = report_dir / f"report-{timestamp}.md"
 
     content = REPORT_TEMPLATE.format(
         timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),

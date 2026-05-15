@@ -32,11 +32,17 @@ class GitConfig:
     github_token: str = field(default_factory=lambda: os.getenv("GITHUB_TOKEN", ""))
 
     @property
+    def repo_name(self) -> str:
+        """从 repo_url 提取仓库名，如 https://github.com/x/bug_java → bug_java。"""
+        if not self.repo_url:
+            return "default"
+        return self.repo_url.rstrip("/").removesuffix(".git").split("/")[-1]
+
+    @property
     def repo_path(self) -> str:
         if not self.repo_url:
             return "."
-        name = self.repo_url.rstrip("/").removesuffix(".git").split("/")[-1]
-        return str(Path(self.clone_base_dir) / name)
+        return str(Path(self.clone_base_dir) / self.repo_name)
 
     @property
     def repo_slug(self) -> str:

@@ -14,40 +14,9 @@ from src.git_manager import GitManager, ensure_repo
 from src.notifier import notify_all
 from src.pr_creator import PRCreator
 from src.test_runner import TestRunner
+from src.utils import filter_stack
 
 console = Console()
-
-
-def filter_stack(error_message: str, app_prefix: str) -> str:
-    """过滤堆栈中的框架噪音行，只保留业务代码帧和异常头。
-
-    支持 Java（`\tat ...`）和 Python（`  File "..."` in site-packages）。
-    app_prefix 为空时直接返回原文。
-    """
-    if not app_prefix:
-        return error_message
-
-    kept, total_at, removed_at = [], 0, 0
-    for line in error_message.splitlines():
-        stripped = line.lstrip()
-        # Java: at com.xxx / at java.base（框架行以 \tat 开头）
-        if stripped.startswith("at "):
-            total_at += 1
-            if app_prefix in line:
-                kept.append(line)
-            else:
-                removed_at += 1
-                continue
-        # Python: File ".../site-packages/..." 框架行
-        elif stripped.startswith('File "') and "site-packages" in line and app_prefix not in line:
-            removed_at += 1
-            continue
-        else:
-            kept.append(line)
-
-    if removed_at:
-        kept.append(f"    ... ({removed_at}/{total_at} 框架堆栈帧已省略)")
-    return "\n".join(kept)
 
 
 @click.group()
@@ -156,6 +125,7 @@ def run(message: str | None, log_file: str | None, config: str, dry_run: bool) -
             pr_url="",
             error_summary=error_message[:300],
             test_passed=False,
+            project_name=cfg.git.repo_name,
         )
         console.print(Rule("[bold red]流程终止[/bold red]"))
         raise SystemExit(1)
@@ -189,6 +159,22 @@ def run(message: str | None, log_file: str | None, config: str, dry_run: bool) -
         pr_url=pr_url,
         error_summary=error_message[:300],
         test_passed=test_passed,
+        project_name=cfg.git.repo_name,
     )
 
     console.print(Rule("[bold green]流程完成[/bold green]"))
+
+
+@cli.command()
+@click.option("--host", default="127.0.0.1", show_default=True, help="监听地址")
+@click.option("--port", default=8000, show_default=True, help="监听端口")
+@click.option("--reload", is_flag=True, default=False, help="开发模式自动重载")
+def web(host: str, port: int, reload: bool) -> None:
+    """启动 Web UI（浏览器可视化界面）。"""
+    try:
+        import uvicorn
+    except ImportError:
+        console.print("[red]未找到 uvicorn，请先安装：uv add uvicorn fastapi python-multipart[/red]")
+        raise SystemExit(1)
+    console.print(f"[green]✓ Web UI 启动中 → http://{host}:{port}[/green]")
+    uvicorn.run("web.app:app", host=host, port=port, reload=reload)

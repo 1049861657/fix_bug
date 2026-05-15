@@ -1,0 +1,540 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>fix-bug · 自动 Bug 修复</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+  <style>
+    [x-cloak] { display: none !important; }
+    html, body { height: 100%; overflow: hidden; }
+
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+
+    .log-wrap { white-space: pre-wrap; word-break: break-all; line-height: 1.55; }
+    .log-step { color: #2563eb; font-weight: 600; }
+    .log-ok   { color: #16a34a; }
+    .log-err  { color: #dc2626; }
+    .log-warn { color: #d97706; }
+    .log-sep   { color: #94a3b8; }
+    .log-wait  { color: #d97706; font-style: italic; }
+
+    .status-running { background:#dbeafe; color:#1d4ed8; }
+    .status-success { background:#dcfce7; color:#15803d; }
+    .status-failed  { background:#fee2e2; color:#b91c1c; }
+    .status-pending { background:#f1f5f9; color:#64748b; }
+
+    .prose-md h1,h2,h3 { color:#1e293b; margin:.6em 0 .3em; font-weight:600; font-size:1em; }
+    .prose-md p { color:#475569; margin:.35em 0; line-height:1.6; }
+    .prose-md code { background:#f1f5f9; border:1px solid #e2e8f0; padding:1px 5px; border-radius:3px; font-size:.85em; font-family:monospace; }
+    .prose-md pre  { background:#f8fafc; border:1px solid #e2e8f0; border-radius:6px; padding:10px; overflow-x:auto; }
+    .prose-md pre code { border:none; background:none; padding:0; }
+  </style>
+</head>
+
+<body class="bg-slate-100 text-slate-800 font-sans text-sm flex flex-col h-full"
+      x-data="app()" x-init="init()" x-cloak>
+
+  <!-- ── 顶栏 ─────────────────────────────────────────────── -->
+  <header class="shrink-0 bg-white border-b border-slate-200 px-4 h-11 flex items-center gap-3 shadow-sm z-10">
+    <span class="font-bold text-blue-600 tracking-tight">fix-bug</span>
+    <span class="text-slate-400 text-xs hidden sm:inline">自动 Bug 修复工具</span>
+    <div class="ml-auto flex gap-0.5">
+      <button @click="tab='new'"
+              :class="tab==='new'
+                ? 'bg-blue-50 text-blue-700 font-medium'
+                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'"
+              class="px-3 py-1.5 rounded text-xs transition-colors">新建任务</button>
+      <button @click="switchHistory()"
+              :class="tab==='history'
+                ? 'bg-blue-50 text-blue-700 font-medium'
+                : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'"
+              class="px-3 py-1.5 rounded text-xs transition-colors flex items-center gap-1.5">
+        历史记录
+        <span x-show="jobs.length"
+              class="bg-slate-200 text-slate-600 rounded-full px-1.5 py-0 text-[10px] leading-4"
+              x-text="jobs.length"></span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ══════════════════════════════════════════════
+       新建任务 Tab  —  全高两栏
+  ══════════════════════════════════════════════ -->
+  <div x-show="tab==='new'" class="flex-1 flex min-h-0">
+
+    <!-- 左栏：表单 -->
+    <aside class="w-80 shrink-0 bg-white border-r border-slate-200 flex flex-col overflow-y-auto">
+      <div class="p-4 space-y-4 flex-1">
+
+        <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider pt-1">提交修复任务</div>
+
+        <!-- 配置文件 -->
+        <div>
+          <label class="block text-xs text-slate-500 mb-1">配置文件</label>
+          <select x-model="selectedConfig"
+                  class="w-full border border-slate-200 rounded-md px-2.5 py-2 text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-xs">
+            <template x-for="c in configs" :key="c.path">
+              <option :value="c.path" x-text="c.name"></option>
+            </template>
+            <option x-show="!configs.length" value="">（未找到 .yaml 文件）</option>
+          </select>
+        </div>
+
+        <!-- 输入模式 -->
+        <div>
+          <label class="block text-xs text-slate-500 mb-1.5">报错信息来源</label>
+          <div class="grid grid-cols-2 gap-1.5">
+            <button @click="inputMode='text'"
+                    :class="inputMode==='text'
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'"
+                    class="border rounded-md py-1.5 text-xs transition-colors">粘贴文本</button>
+            <button @click="inputMode='file'"
+                    :class="inputMode==='file'
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'"
+                    class="border rounded-md py-1.5 text-xs transition-colors">上传文件</button>
+          </div>
+        </div>
+
+        <!-- 文本粘贴 -->
+        <div x-show="inputMode==='text'">
+          <label class="block text-xs text-slate-500 mb-1">错误日志 / 异常堆栈</label>
+          <textarea x-model="errorText" rows="12"
+                    placeholder="粘贴报错日志或异常堆栈..."
+                    class="w-full border border-slate-200 rounded-md px-2.5 py-2 text-slate-700 bg-white placeholder-slate-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-xs font-mono resize-none leading-relaxed"></textarea>
+        </div>
+
+        <!-- 文件上传 -->
+        <div x-show="inputMode==='file'">
+          <label :class="uploadedFile ? 'border-green-400 bg-green-50' : 'border-slate-200 hover:border-blue-400 hover:bg-blue-50'"
+                 class="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed rounded-md cursor-pointer transition-colors">
+            <div x-show="!uploadedFile" class="text-center">
+              <div class="text-2xl text-slate-300 mb-1">↑</div>
+              <div class="text-xs text-slate-400">点击或拖拽 .log / .txt 文件</div>
+            </div>
+            <div x-show="uploadedFile" class="text-center">
+              <div class="text-lg text-green-500 mb-1">✓</div>
+              <div class="text-xs text-green-600 font-medium" x-text="uploadedFile?.name"></div>
+              <div class="text-[10px] text-green-500 mt-0.5">点击重新选择</div>
+            </div>
+            <input type="file" class="hidden" accept=".log,.txt,.out"
+                   @change="uploadedFile = $event.target.files[0]">
+          </label>
+        </div>
+
+        <!-- 提交按钮 -->
+        <button @click="submit()"
+                :disabled="submitting || !selectedConfig"
+                class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-md text-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+          <span x-show="!submitting">▶ 开始修复</span>
+          <span x-show="submitting" class="flex items-center gap-2">
+            <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 00-8 8h4z"/>
+            </svg>
+            运行中...
+          </span>
+        </button>
+
+        <!-- 错误提示 -->
+        <div x-show="submitError" class="text-xs text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2" x-text="submitError"></div>
+      </div>
+
+      <!-- 任务结果卡（底部粘附） -->
+      <template x-if="currentJob">
+        <div class="shrink-0 border-t border-slate-200 p-4 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-slate-500">任务结果</span>
+            <span :class="'status-'+currentJob.status"
+                  class="text-[11px] font-medium px-2 py-0.5 rounded-full"
+                  x-text="{success:'✅ 成功', failed:'❌ 失败', running:'⟳ 运行中', pending:'⏳ 等待'}[currentJob.status]"></span>
+          </div>
+          <div x-show="currentJob.branch" class="text-xs text-slate-500">
+            分支：<span class="text-slate-700 font-mono" x-text="currentJob.branch"></span>
+          </div>
+          <a x-show="currentJob.pr_url" :href="currentJob.pr_url" target="_blank"
+             class="block text-xs text-blue-600 hover:underline truncate" x-text="currentJob.pr_url"></a>
+          <div x-show="currentJob.status==='failed' && currentJob.error_msg"
+               class="text-xs text-red-600 bg-red-50 border border-red-100 rounded px-2 py-1.5"
+               x-text="currentJob.error_msg"></div>
+        </div>
+      </template>
+    </aside>
+
+    <!-- 右栏：实时日志 -->
+    <div class="flex-1 flex flex-col min-w-0 bg-slate-50">
+        <!-- 日志工具栏 -->
+      <div class="shrink-0 bg-white border-b border-slate-200 px-4 py-2 flex items-center gap-3">
+        <span class="text-xs font-semibold text-slate-500 uppercase tracking-wider">执行日志</span>
+        <div x-show="currentJob" class="flex items-center gap-1.5">
+          <div :class="{'bg-blue-500 animate-pulse': currentJob?.status==='running', 'bg-green-500': currentJob?.status==='success', 'bg-red-500': currentJob?.status==='failed'}"
+               class="w-2 h-2 rounded-full"></div>
+          <span class="text-xs text-slate-400" x-text="currentJob?.id?.slice(0,8)+'…'"></span>
+        </div>
+        <!-- 实时计时器 -->
+        <div x-show="currentJob" class="flex items-center gap-1">
+          <span class="text-xs font-mono"
+                :class="currentJob?.status==='running' ? 'text-blue-600' : (currentJob?.status==='success' ? 'text-green-600' : 'text-red-500')"
+                x-text="elapsedStr"></span>
+          <span x-show="currentJob?.status==='running'" class="text-[10px] text-slate-400">elapsed</span>
+        </div>
+        <!-- 最后活动指示器：仅运行中显示，静默超过5s变色提醒 -->
+        <div x-show="currentJob?.status==='running' && lastActivityStr"
+             class="flex items-center gap-1 ml-1 border-l border-slate-200 pl-3">
+          <span class="text-[10px]"
+                :class="lastActivityMs && (Date.now()-lastActivityMs)>20000 ? 'text-amber-500' : 'text-slate-400'"
+                x-text="'活动 ' + lastActivityStr"></span>
+          <span x-show="lastActivityMs && (Date.now()-lastActivityMs)>20000"
+                class="text-[10px] text-amber-500 animate-pulse">· 等待响应</span>
+        </div>
+        <div class="ml-auto flex items-center gap-3">
+          <label class="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer select-none">
+            <input type="checkbox" x-model="autoScroll" class="rounded"> 自动滚动
+          </label>
+          <button @click="clearLogs()" class="text-xs text-slate-400 hover:text-slate-600 transition-colors">清空</button>
+          <span class="text-xs text-slate-300" x-show="logs.length" x-text="logs.length + ' 行'"></span>
+        </div>
+      </div>
+
+      <!-- 日志内容区 -->
+      <div x-ref="logBox"
+           class="flex-1 overflow-y-auto p-4 font-mono text-xs">
+        <div x-show="!logs.length" class="text-slate-300 select-none pt-2">等待任务启动...</div>
+        <template x-for="(line, i) in logs" :key="i">
+          <div class="log-wrap"
+               :class="{
+                 'log-step': line.startsWith('Step '),
+                 'log-ok':   line.startsWith('✓') || line.startsWith('✅'),
+                 'log-err':  line.startsWith('✗') || line.startsWith('❌') || line.startsWith('[错误]') || line.includes('[ERROR]'),
+                 'log-warn': line.includes('[WARN]') || line.startsWith('PR 创建失败') || line.startsWith('分支无新提交'),
+                 'log-sep':  line.startsWith('─') || line.startsWith('▶'),
+                 'log-wait': line.startsWith('⏳'),
+                 'text-slate-700': !line.startsWith('Step ') && !line.startsWith('✓') && !line.startsWith('✅') && !line.startsWith('✗') && !line.startsWith('❌') && !line.startsWith('[错误]') && !line.includes('[ERROR]') && !line.includes('[WARN]') && !line.startsWith('─') && !line.startsWith('▶') && !line.startsWith('PR 创建失败') && !line.startsWith('分支无新提交') && !line.startsWith('⏳'),
+               }"
+               x-text="line || '\u00a0'"></div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       历史记录 Tab
+  ══════════════════════════════════════════════ -->
+  <div x-show="tab==='history'" class="flex-1 overflow-y-auto bg-slate-50">
+    <div class="max-w-5xl mx-auto p-5 space-y-6">
+
+      <!-- 任务列表 -->
+      <div>
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider">历史任务</h2>
+          <button @click="loadJobs(); loadReports()" class="text-xs text-blue-600 hover:text-blue-700">↺ 刷新</button>
+        </div>
+        <div class="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm">
+          <table class="w-full text-xs">
+            <thead>
+              <tr class="border-b border-slate-100 text-slate-400 text-left">
+                <th class="px-4 py-2.5 font-medium">时间</th>
+                <th class="px-4 py-2.5 font-medium">状态</th>
+                <th class="px-4 py-2.5 font-medium">用时</th>
+                <th class="px-4 py-2.5 font-medium">配置</th>
+                <th class="px-4 py-2.5 font-medium">分支</th>
+                <th class="px-4 py-2.5 font-medium">PR</th>
+                <th class="px-4 py-2.5 font-medium text-right">日志</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-50">
+              <template x-if="!jobs.length">
+                <tr><td colspan="6" class="px-4 py-8 text-center text-slate-300">暂无任务记录</td></tr>
+              </template>
+              <template x-for="job in jobs" :key="job.id">
+                <tr class="hover:bg-slate-50 transition-colors">
+                  <td class="px-4 py-2.5 text-slate-500 font-mono" x-text="job.created_at.replace('T',' ')"></td>
+                  <td class="px-4 py-2.5">
+                    <span :class="'status-'+job.status"
+                          class="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium"
+                          x-text="{success:'✅ 成功', failed:'❌ 失败', running:'⟳ 运行中', pending:'⏳ 等待'}[job.status]"></span>
+                  </td>
+                  <td class="px-4 py-2.5 font-mono text-slate-500 tabular-nums"
+                      x-text="job.duration_s != null ? fmtDuration(job.duration_s) : (job.status==='running' ? '—' : '—')"></td>
+                  <td class="px-4 py-2.5 text-slate-600" x-text="job.config_path"></td>
+                  <td class="px-4 py-2.5 font-mono text-slate-500 max-w-[200px] truncate">
+                    <span x-text="job.branch || '—'"></span>
+                  </td>
+                  <td class="px-4 py-2.5">
+                    <a x-show="job.pr_url" :href="job.pr_url" target="_blank"
+                       class="text-blue-600 hover:underline">链接</a>
+                    <span x-show="!job.pr_url" class="text-slate-300">—</span>
+                  </td>
+                  <td class="px-4 py-2.5 text-right">
+                    <button @click="viewJobLogs(job)"
+                            class="text-blue-600 hover:text-blue-700 text-xs">查看</button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 报告列表 -->
+      <div>
+        <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">修复报告</h2>
+        <div class="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm">
+          <table class="w-full text-xs">
+            <thead>
+              <tr class="border-b border-slate-100 text-slate-400 text-left">
+                <th class="px-4 py-2.5 font-medium">文件名</th>
+                <th class="px-4 py-2.5 font-medium text-right">操作</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-50">
+              <template x-if="!reports.length">
+                <tr><td colspan="2" class="px-4 py-8 text-center text-slate-300">暂无报告</td></tr>
+              </template>
+              <template x-for="r in reports" :key="r.id">
+                <tr class="hover:bg-slate-50 transition-colors">
+                  <td class="px-4 py-2.5 text-slate-600 font-mono" x-text="r.name"></td>
+                  <td class="px-4 py-2.5 text-right">
+                    <button @click="viewReport(r.id)"
+                            class="text-blue-600 hover:text-blue-700">查看</button>
+                  </td>
+                </tr>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════
+       Modal：日志 / 报告
+  ══════════════════════════════════════════════ -->
+  <div x-show="modal.open"
+       @keydown.escape.window="modal.open=false"
+       class="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" @click="modal.open=false"></div>
+    <div class="relative w-full max-w-4xl bg-white rounded-xl shadow-2xl flex flex-col"
+         style="max-height:85vh">
+      <div class="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 shrink-0">
+        <span class="text-sm font-semibold text-slate-700" x-text="modal.title"></span>
+        <button @click="modal.open=false"
+                class="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 text-lg leading-none transition-colors">×</button>
+      </div>
+      <div class="flex-1 overflow-y-auto">
+        <!-- 日志模式 -->
+        <template x-if="modal.mode==='log'">
+          <div class="p-4 font-mono text-xs space-y-0 bg-slate-50 min-h-full">
+            <template x-if="!modal.lines.length">
+              <div class="text-slate-300">暂无日志</div>
+            </template>
+            <template x-for="(line, i) in modal.lines" :key="i">
+              <div class="log-wrap"
+                   :class="{
+                     'log-step': line.startsWith('Step '),
+                     'log-ok':   line.startsWith('✓') || line.startsWith('✅'),
+                     'log-err':  line.startsWith('✗') || line.startsWith('❌') || line.startsWith('[错误]') || line.includes('[ERROR]'),
+                     'log-warn': line.includes('[WARN]') || line.startsWith('PR 创建失败'),
+                     'log-sep':  line.startsWith('─') || line.startsWith('▶'),
+                     'text-slate-600': true,
+                   }"
+                   x-text="line || '\u00a0'"></div>
+            </template>
+          </div>
+        </template>
+        <!-- 报告模式 -->
+        <template x-if="modal.mode==='report'">
+          <div class="prose-md p-6 text-sm" x-html="modal.html"></div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function app() {
+      return {
+        tab: 'new',
+        configs: [], selectedConfig: '',
+        inputMode: 'text', errorText: '', uploadedFile: null,
+        submitting: false, submitError: '',
+        currentJob: null, logs: [], autoScroll: true,
+        jobs: [], reports: [],
+        modal: { open: false, title: '', mode: 'log', lines: [], html: '' },
+
+        // 总用时计时器
+        elapsedStr: '0s',
+        _timerStart: null,
+        _timerInterval: null,
+
+        // 最后活动指示器
+        lastActivityMs: null,
+        lastActivityStr: '',
+        _activityInterval: null,
+
+        fmtDuration(secs) {
+          if (secs == null) return '—';
+          const s = Math.floor(secs);
+          return s >= 60 ? `${Math.floor(s/60)}m ${String(s%60).padStart(2,'0')}s` : `${s}s`;
+        },
+
+        _startTimer() {
+          this._timerStart = Date.now();
+          this.elapsedStr = '0s';
+          this._timerInterval = setInterval(() => {
+            const s = Math.floor((Date.now() - this._timerStart) / 1000);
+            this.elapsedStr = this.fmtDuration(s);
+          }, 1000);
+          // 最后活动计时
+          this.lastActivityMs = Date.now();
+          this.lastActivityStr = '刚刚';
+          this._activityInterval = setInterval(() => {
+            if (!this.lastActivityMs) return;
+            const s = Math.floor((Date.now() - this.lastActivityMs) / 1000);
+            if (s < 5) this.lastActivityStr = '刚刚';
+            else if (s < 60) this.lastActivityStr = `${s}s 前`;
+            else this.lastActivityStr = `${Math.floor(s/60)}m ${s%60}s 前`;
+          }, 1000);
+        },
+
+        _stopTimer(durationS) {
+          clearInterval(this._timerInterval);
+          clearInterval(this._activityInterval);
+          this._timerInterval = null;
+          this._activityInterval = null;
+          this.lastActivityMs = null;
+          this.lastActivityStr = '';
+          this.elapsedStr = durationS != null ? this.fmtDuration(durationS) : this.elapsedStr;
+        },
+
+        _touchActivity() {
+          this.lastActivityMs = Date.now();
+          this.lastActivityStr = '刚刚';
+        },
+
+        async init() {
+          await Promise.all([this.loadConfigs(), this.loadJobs(), this.loadReports()]);
+        },
+
+        async loadConfigs() {
+          const r = await fetch('/api/configs');
+          this.configs = await r.json();
+          if (this.configs.length) this.selectedConfig = this.configs[0].path;
+        },
+
+        async loadJobs() {
+          const r = await fetch('/api/jobs');
+          this.jobs = await r.json();
+        },
+
+        async loadReports() {
+          const r = await fetch('/api/reports');
+          this.reports = await r.json();
+        },
+
+        switchHistory() {
+          this.tab = 'history';
+          this.loadJobs();
+          this.loadReports();
+        },
+
+        clearLogs() {
+          this.logs = [];
+          this.currentJob = null;
+          this.submitting = false;
+          this.submitError = '';
+        },
+
+        async submit() {
+          this.submitError = '';
+          if (!this.selectedConfig) { this.submitError = '请选择配置文件'; return; }
+          if (this.inputMode === 'text' && !this.errorText.trim()) { this.submitError = '请输入报错信息'; return; }
+          if (this.inputMode === 'file' && !this.uploadedFile) { this.submitError = '请选择日志文件'; return; }
+
+          this.submitting = true;
+          this.logs = [];
+          this.currentJob = null;
+
+          const fd = new FormData();
+          fd.append('config_path', this.selectedConfig);
+          if (this.inputMode === 'file') {
+            fd.append('log_file', this.uploadedFile);
+          } else {
+            fd.append('error_text', this.errorText);
+          }
+
+          try {
+            const r = await fetch('/api/jobs', { method: 'POST', body: fd });
+            if (!r.ok) {
+              const err = await r.json();
+              this.submitError = err.detail || '提交失败';
+              this.submitting = false;
+              return;
+            }
+            const data = await r.json();
+            this.currentJob = { id: data.id, status: 'running', branch: '', pr_url: '', error_msg: '', duration_s: null };
+            this._startTimer();
+            this._startStream(data.id);
+          } catch (e) {
+            this.submitError = '网络错误：' + e.message;
+            this.submitting = false;
+          }
+        },
+
+        _startStream(jobId) {
+          const es = new EventSource(`/api/jobs/${jobId}/stream`);
+          es.onmessage = (e) => {
+            this.logs.push(e.data);
+            this._touchActivity();
+            if (this.autoScroll) {
+              this.$nextTick(() => {
+                const el = this.$refs.logBox;
+                if (el) el.scrollTop = el.scrollHeight;
+              });
+            }
+          };
+          es.addEventListener('done', async () => {
+            es.close();
+            this.submitting = false;
+            const r = await fetch(`/api/jobs/${jobId}`);
+            this.currentJob = await r.json();
+            this._stopTimer(this.currentJob.duration_s);
+            this.loadJobs();
+            this.loadReports();
+          });
+          es.onerror = () => { es.close(); this.submitting = false; this._stopTimer(null); };
+        },
+
+        async viewJobLogs(job) {
+          const r = await fetch(`/api/jobs/${job.id}/logs`);
+          const data = await r.json();
+          this.modal = {
+            open: true,
+            title: `日志 · ${job.id.slice(0,8)}…  [${job.status}]  ${job.created_at.replace('T',' ')}`,
+            mode: 'log',
+            lines: data.lines,
+            html: '',
+          };
+        },
+
+        async viewReport(reportId) {
+          const r = await fetch(`/api/reports/${reportId}`);
+          const data = await r.json();
+          this.modal = {
+            open: true,
+            title: `报告 · ${reportId}`,
+            mode: 'report',
+            lines: [],
+            html: marked.parse(data.content),
+          };
+        },
+      };
+    }
+  </script>
+</body>
+</html>
