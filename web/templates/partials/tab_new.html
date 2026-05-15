@@ -84,15 +84,16 @@
           <span class="text-xs text-slate-500">任务结果</span>
           <span :class="'status-'+currentJob.status"
                 class="text-[11px] font-medium px-2 py-0.5 rounded-full"
-                x-text="{success:'✅ 成功', failed:'❌ 失败', running:'⟳ 运行中', pending:'⏳ 等待'}[currentJob.status]"></span>
+                x-text="{success:'✅ 成功', failed:'❌ 失败', stopped:'⏹ 已停止', running:'⟳ 运行中', pending:'⏳ 等待'}[currentJob.status]"></span>
         </div>
         <div x-show="currentJob.branch" class="text-xs text-slate-500">
           分支：<span class="text-slate-700 font-mono" x-text="currentJob.branch"></span>
         </div>
         <a x-show="currentJob.pr_url" :href="currentJob.pr_url" target="_blank"
            class="block text-xs text-blue-600 hover:underline truncate" x-text="currentJob.pr_url"></a>
-        <div x-show="currentJob.status==='failed' && currentJob.error_msg"
-             class="text-xs text-red-600 bg-red-50 border border-red-100 rounded px-2 py-1.5"
+        <div x-show="(currentJob.status==='failed' || currentJob.status==='stopped') && currentJob.error_msg"
+             :class="currentJob.status==='stopped' ? 'text-amber-700 bg-amber-50 border-amber-100' : 'text-red-600 bg-red-50 border-red-100'"
+             class="text-xs border rounded px-2 py-1.5"
              x-text="currentJob.error_msg"></div>
       </div>
     </template>
@@ -109,14 +110,15 @@
         <div :class="{
                'bg-blue-500 animate-pulse': currentJob?.status==='running',
                'bg-green-500': currentJob?.status==='success',
-               'bg-red-500':   currentJob?.status==='failed'
+               'bg-red-500':   currentJob?.status==='failed',
+               'bg-amber-400': currentJob?.status==='stopped'
              }" class="w-2 h-2 rounded-full"></div>
         <span class="text-xs text-slate-400" x-text="currentJob?.id?.slice(0,8)+'…'"></span>
       </div>
 
       <div x-show="currentJob" class="flex items-center gap-1">
         <span class="text-xs font-mono"
-              :class="currentJob?.status==='running' ? 'text-blue-600' : (currentJob?.status==='success' ? 'text-green-600' : 'text-red-500')"
+              :class="currentJob?.status==='running' ? 'text-blue-600' : currentJob?.status==='success' ? 'text-green-600' : currentJob?.status==='stopped' ? 'text-amber-600' : 'text-red-500'"
               x-text="elapsedStr"></span>
         <span x-show="currentJob?.status==='running'" class="text-[10px] text-slate-400">elapsed</span>
       </div>
@@ -124,34 +126,53 @@
       <div x-show="currentJob?.status==='running' && lastActivityStr"
            class="flex items-center gap-1 ml-1 border-l border-slate-200 pl-3">
         <span class="text-[10px]"
-              :class="lastActivityMs && (Date.now()-lastActivityMs)>20000 ? 'text-amber-500' : 'text-slate-400'"
+              :class="lastActivityMs && (Date.now()-lastActivityMs)>15000 ? 'text-amber-500' : 'text-slate-400'"
               x-text="'活动 ' + lastActivityStr"></span>
-        <span x-show="lastActivityMs && (Date.now()-lastActivityMs)>20000"
-              class="text-[10px] text-amber-500 animate-pulse">· 等待响应</span>
+        <span x-show="lastActivityMs && (Date.now()-lastActivityMs)>15000"
+              class="text-[10px] text-amber-500 animate-pulse">· LLM 处理中</span>
       </div>
 
       <div class="ml-auto flex items-center gap-3">
-        <label class="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer select-none">
-          <input type="checkbox" x-model="autoScroll" class="rounded"> 自动滚动
-        </label>
-        <button @click="clearLogs()" class="text-xs text-slate-400 hover:text-slate-600 transition-colors">清空</button>
-        <span class="text-xs text-slate-300" x-show="logs.length" x-text="logs.length + ' 行'"></span>
-      </div>
+          <!-- 停止按钮（仅运行中显示） -->
+          <div x-show="currentJob?.status==='running'" class="flex items-center gap-1.5">
+            <template x-if="!stopConfirm">
+              <button @click="stopConfirm=true"
+                      class="flex items-center gap-1 text-xs text-slate-400 hover:text-red-500 border border-slate-200 hover:border-red-300 rounded px-2 py-0.5 transition-colors">
+                <span class="text-[10px]">■</span> 停止
+              </button>
+            </template>
+            <template x-if="stopConfirm">
+              <div class="flex items-center gap-1.5 bg-red-50 border border-red-200 rounded px-2 py-0.5">
+                <span class="text-[11px] text-red-600 font-medium">确定停止？</span>
+                <button @click="cancelJob()"
+                        class="text-[11px] text-red-600 font-semibold hover:underline">停止</button>
+                <span class="text-slate-300 text-[11px]">|</span>
+                <button @click="stopConfirm=false"
+                        class="text-[11px] text-slate-400 hover:text-slate-600">取消</button>
+              </div>
+            </template>
+          </div>
+
+          <label class="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer select-none">
+            <input type="checkbox" x-model="autoScroll" class="rounded"> 自动滚动
+          </label>
+          <button @click="clearLogs()" class="text-xs text-slate-400 hover:text-slate-600 transition-colors">清空</button>
+          <span class="text-xs text-slate-300" x-show="logs.length" x-text="logs.length + ' 行'"></span>
+        </div>
     </div>
 
     <!-- 日志内容 -->
     <div x-ref="logBox" class="flex-1 overflow-y-auto p-4 font-mono text-xs">
       <div x-show="!logs.length" class="text-slate-300 select-none pt-2">等待任务启动...</div>
       <template x-for="(line, i) in logs" :key="i">
-        <div class="log-wrap"
-             :class="{
-               'log-step': line.startsWith('Step '),
-               'log-ok':   line.startsWith('✓') || line.startsWith('✅'),
-               'log-err':  line.startsWith('✗') || line.startsWith('❌') || line.startsWith('[错误]') || line.includes('[ERROR]'),
-               'log-warn': line.includes('[WARN]') || line.startsWith('PR 创建失败') || line.startsWith('分支无新提交'),
-               'log-sep':  line.startsWith('─') || line.startsWith('▶'),
-               'log-wait': line.startsWith('⏳'),
-               'text-slate-700': !line.startsWith('Step ') && !line.startsWith('✓') && !line.startsWith('✅') && !line.startsWith('✗') && !line.startsWith('❌') && !line.startsWith('[错误]') && !line.includes('[ERROR]') && !line.includes('[WARN]') && !line.startsWith('─') && !line.startsWith('▶') && !line.startsWith('PR 创建失败') && !line.startsWith('分支无新提交') && !line.startsWith('⏳'),
+        <div :class="line.startsWith('⏳') ? 'log-wait' : {
+               'log-wrap':  true,
+               'log-step':  line.startsWith('Step '),
+               'log-ok':    line.startsWith('✓') || line.startsWith('✅'),
+               'log-err':   line.startsWith('✗') || line.startsWith('❌') || line.startsWith('[错误]') || line.includes('[ERROR]'),
+               'log-warn':  line.includes('[WARN]') || line.startsWith('PR 创建失败') || line.startsWith('分支无新提交'),
+               'log-sep':   line.startsWith('─') || line.startsWith('▶'),
+               'text-slate-700': !line.startsWith('Step ') && !line.startsWith('✓') && !line.startsWith('✅') && !line.startsWith('✗') && !line.startsWith('❌') && !line.startsWith('[错误]') && !line.includes('[ERROR]') && !line.includes('[WARN]') && !line.startsWith('─') && !line.startsWith('▶') && !line.startsWith('PR 创建失败') && !line.startsWith('分支无新提交'),
              }"
              x-text="line || '\u00a0'"></div>
       </template>

@@ -44,12 +44,15 @@ def _check_aider() -> None:
 
 
 def _build_cmd(model: str, prompt: str, metadata_file: str, test_cmd: str, auto_test: bool) -> list[str]:
+    # 统一使用 OpenAI 兼容协议，自动补全 provider 前缀
+    aider_model = model if "/" in model else f"openai/{model}"
     cmd = [
         "aider",
-        "--model", model,
+        "--model", aider_model,
         "--message", prompt,
         "--yes-always",
         "--no-pretty",
+        "--no-fancy-input",
         "--edit-format", "diff",
         "--model-metadata-file", metadata_file,
     ]
@@ -73,7 +76,7 @@ def _run_aider(
     return result.returncode == 0
 
 
-_HEARTBEAT_INTERVAL = 15   # 静默超过此秒数开始发心跳
+_HEARTBEAT_INTERVAL = 15   # 静默超过此秒数发第一条心跳
 _HEARTBEAT_REPEAT   = 30   # 之后每隔此秒数重复一次
 
 
@@ -86,6 +89,7 @@ def _run_aider_streaming(
     log_fn: Callable[[str], None],
     test_cmd: str = "",
     auto_test: bool = False,
+    proc_cb: Callable | None = None,
 ) -> bool:
     """Web 模式：用 Popen 逐行捕获输出，通过 log_fn 回调传递给调用方。"""
     cmd = _build_cmd(model, prompt, metadata_file, test_cmd, auto_test)
@@ -100,18 +104,23 @@ def _run_aider_streaming(
         encoding="utf-8",
         errors="replace",
     )
+    if proc_cb:
+        proc_cb(proc)
 
     last_output = [time.monotonic()]   # 最后一次有输出的时间（可变容器供闭包写入）
 
     def _heartbeat() -> None:
         """静默检测：无输出超过阈值时周期性发送等待提示。"""
+        last_sent = 0.0   # 上次发心跳时已静默的秒数
         while proc.poll() is None:
             time.sleep(5)
             silent = time.monotonic() - last_output[0]
-            if silent >= _HEARTBEAT_INTERVAL and int(silent) % _HEARTBEAT_REPEAT < 5:
+            # 首次达到阈值，或距上次发心跳已过 _HEARTBEAT_REPEAT 秒
+            if silent >= _HEARTBEAT_INTERVAL and (silent - last_sent) >= _HEARTBEAT_REPEAT:
+                last_sent = silent
                 mins, secs = divmod(int(silent), 60)
                 dur = f"{mins}m {secs:02d}s" if mins else f"{secs}s"
-                log_fn(f"⏳ 等待 Aider/LLM 响应中... (已静默 {dur}，进程仍在运行)")
+                log_fn(f"⏳ 等待 Aider/LLM 响应中... 已静默 {dur}")
 
     threading.Thread(target=_heartbeat, daemon=True).start()
 
@@ -138,6 +147,7 @@ class AiderRunner:
     ):
         self.repo_path = Path(repo_path).resolve()
         self.model = model
+        self._proc: subprocess.Popen | None = None
         self.test_framework = test_framework
         self.test_dir = test_dir
         self.api_base = api_base
@@ -148,9 +158,15 @@ class AiderRunner:
         else:
             self.test_cmd = test_cmd
 
+    def cancel(self) -> None:
+        """强制终止当前 Aider 子进程。"""
+        if self._proc and self._proc.poll() is None:
+            self._proc.kill()
+
     def _write_model_metadata(self) -> str:
+        aider_model = self.model if "/" in self.model else f"openai/{self.model}"
         meta = {
-            self.model: {
+            aider_model: {
                 "max_tokens": self.context_tokens,
                 "max_input_tokens": self.context_tokens,
                 "max_output_tokens": 8096,
@@ -211,6 +227,7 @@ class AiderRunner:
                 log_fn=log_fn,
                 test_cmd=self.test_cmd,
                 auto_test=True,
+                proc_cb=lambda p: setattr(self, '_proc', p),
             )
 
         if log_fn is None:

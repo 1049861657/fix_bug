@@ -21,7 +21,7 @@
               <th class="px-4 py-2.5 font-medium">配置</th>
               <th class="px-4 py-2.5 font-medium">分支</th>
               <th class="px-4 py-2.5 font-medium">PR</th>
-              <th class="px-4 py-2.5 font-medium text-right">日志</th>
+              <th class="px-4 py-2.5 font-medium text-right">操作</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-50">
@@ -33,8 +33,9 @@
                 <td class="px-4 py-2.5 text-slate-500 font-mono" x-text="job.created_at.replace('T',' ')"></td>
                 <td class="px-4 py-2.5">
                   <span :class="'status-'+job.status"
-                        class="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium"
-                        x-text="{success:'✅ 成功', failed:'❌ 失败', running:'⟳ 运行中', pending:'⏳ 等待'}[job.status]"></span>
+                        class="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium cursor-default"
+                        :title="job.error_msg || ''"
+                        x-text="{success:'✅ 成功', failed:'❌ 失败', stopped:'⏹ 已停止', running:'⟳ 运行中', pending:'⏳ 等待'}[job.status]"></span>
                 </td>
                 <td class="px-4 py-2.5 font-mono text-slate-500 tabular-nums"
                     x-text="job.duration_s != null ? fmtDuration(job.duration_s) : '—'"></td>
@@ -46,7 +47,17 @@
                   <span x-show="!job.pr_url" class="text-slate-300">—</span>
                 </td>
                 <td class="px-4 py-2.5 text-right">
-                  <button @click="viewJobLogs(job)" class="text-blue-600 hover:text-blue-700 text-xs">查看</button>
+                  <div class="flex items-center justify-end gap-3">
+                    <button @click="viewJobLogs(job)"
+                            class="text-blue-600 hover:text-blue-700 text-xs">查看</button>
+
+                    <!-- 删除：非运行中才显示 -->
+                    <template x-if="job.status !== 'running'">
+                      <button @click="deleteJob(job.id)"
+                              class="text-slate-300 hover:text-red-400 text-xs transition-colors"
+                              title="删除记录">🗑</button>
+                    </template>
+                  </div>
                 </td>
               </tr>
             </template>

@@ -1,6 +1,6 @@
 /**
  * api.js — 通用数据加载与 Tab 切换模块
- * 负责：loadConfigs / loadJobs / loadReports / switchHistory / switchConfig
+ * 负责：loadConfigs / loadJobs / loadReports / switchHistory / switchConfig / deleteJob
  */
 window._AppModules = window._AppModules || {};
 
@@ -37,5 +37,15 @@ window._AppModules.api = {
   async switchConfig() {
     this.tab = 'config';
     await Promise.all([this.loadAiderCfg(), this.loadCfgFile()]);
+  },
+
+  async deleteJob(jobId) {
+    const r = await fetch(`/api/jobs/${jobId}`, { method: 'DELETE' });
+    if (r.ok) {
+      this.jobs = this.jobs.filter(j => j.id !== jobId);
+    } else {
+      const err = await r.json();
+      alert(err.detail || '删除失败');
+    }
   },
 };

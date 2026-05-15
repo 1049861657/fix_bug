@@ -14,7 +14,7 @@ DB_PATH = Path(__file__).parent.parent / "jobs.db"
 class Job:
     id: str
     config_path: str
-    status: str       # pending | running | success | failed
+    status: str       # pending | running | success | failed | stopped
     created_at: str   # 任务提交时间，也用于计算用时（finished_at - created_at）
     branch: str
     pr_url: str
@@ -81,3 +81,9 @@ class JobStore:
                 "SELECT * FROM jobs ORDER BY created_at DESC"
             ).fetchall()
         return [Job(**dict(row)) for row in rows]
+
+    def delete(self, job_id: str) -> bool:
+        """从数据库删除任务记录，返回是否实际删除了一行。"""
+        with self._conn() as conn:
+            cursor = conn.execute("DELETE FROM jobs WHERE id = ?", (job_id,))
+        return cursor.rowcount > 0

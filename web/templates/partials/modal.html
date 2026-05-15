@@ -27,13 +27,13 @@
             <div class="text-slate-300">暂无日志</div>
           </template>
           <template x-for="(line, i) in modal.lines" :key="i">
-            <div class="log-wrap"
-                 :class="{
-                   'log-step': line.startsWith('Step '),
-                   'log-ok':   line.startsWith('✓') || line.startsWith('✅'),
-                   'log-err':  line.startsWith('✗') || line.startsWith('❌') || line.startsWith('[错误]') || line.includes('[ERROR]'),
-                   'log-warn': line.includes('[WARN]') || line.startsWith('PR 创建失败'),
-                   'log-sep':  line.startsWith('─') || line.startsWith('▶'),
+            <div :class="line.startsWith('⏳') ? 'log-wait' : {
+                   'log-wrap':  true,
+                   'log-step':  line.startsWith('Step '),
+                   'log-ok':    line.startsWith('✓') || line.startsWith('✅'),
+                   'log-err':   line.startsWith('✗') || line.startsWith('❌') || line.startsWith('[错误]') || line.includes('[ERROR]'),
+                   'log-warn':  line.includes('[WARN]') || line.startsWith('PR 创建失败'),
+                   'log-sep':   line.startsWith('─') || line.startsWith('▶'),
                    'text-slate-600': true,
                  }"
                  x-text="line || '\u00a0'"></div>

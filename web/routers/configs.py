@@ -27,7 +27,7 @@ _TYPE_DEFAULTS = {
 
 class AiderYaml(BaseModel):
     """全局 Aider 配置，对应 aider.yaml。"""
-    model: str = "openai/claude-opus-4.7"
+    model: str = "claude-opus-4.7"
     api_base: str = ""
     api_key: str = ""
     context_tokens: int = 200000

@@ -11,7 +11,7 @@ _CONFIG_DIR = Path("config")
 
 @dataclass
 class AiderConfig:
-    model: str = "openai/claude-opus-4.7"
+    model: str = "claude-opus-4.7"
     api_base: str = ""
     api_key: str = ""
     context_tokens: int = 200000
@@ -90,7 +90,7 @@ def load_config(path: str | Path = _CONFIG_DIR / "python.yaml",
 
     return AppConfig(
         aider=AiderConfig(
-            model=aider_raw.get("model", "openai/claude-opus-4.7"),
+            model=aider_raw.get("model", "claude-opus-4.7"),
             api_base=aider_raw.get("api_base", ""),
             api_key=aider_raw.get("api_key", ""),
             context_tokens=int(aider_raw.get("context_tokens", 200000)),

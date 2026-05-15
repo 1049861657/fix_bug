@@ -14,12 +14,30 @@ window._AppModules.task = {
   currentJob: null,
   logs: [],
   autoScroll: true,
+  stopConfirm: false,
 
   clearLogs() {
     this.logs = [];
     this.currentJob = null;
     this.submitting = false;
     this.submitError = '';
+    this.stopConfirm = false;
+  },
+
+  async cancelJob() {
+    if (!this.currentJob) return;
+    try {
+      await fetch(`/api/jobs/${this.currentJob.id}/cancel`, { method: 'POST' });
+      this.stopConfirm = false;
+      this.submitting = false;
+      this.logs.push('✗ 任务已被手动停止');
+      this._stopTimer(null);
+      const r = await fetch(`/api/jobs/${this.currentJob.id}`);
+      this.currentJob = await r.json();
+      this.loadJobs();
+    } catch (e) {
+      this.stopConfirm = false;
+    }
   },
 
   async submit() {
@@ -62,7 +80,8 @@ window._AppModules.task = {
     const es = new EventSource(`/api/jobs/${jobId}/stream`);
     es.onmessage = (e) => {
       this.logs.push(e.data);
-      this._touchActivity();
+      // 心跳行（⏳ 开头）不重置活动时间，避免掩盖真实静默状态
+      if (!e.data.startsWith('⏳')) this._touchActivity();
       if (this.autoScroll) {
         this.$nextTick(() => {
           const el = this.$refs.logBox;

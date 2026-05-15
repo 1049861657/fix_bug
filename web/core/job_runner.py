@@ -19,6 +19,14 @@ from web.core.job_store import Job, JobStore
 LOG_DIR = Path("reports") / "logs"
 
 
+class JobCancelledError(Exception):
+    """用户主动取消任务时抛出，用于从 _run() 中干净退出。
+
+    参照 asyncio.CancelledError 的设计：用异常做流程控制，
+    让 try/except 自动展开所有后续步骤，无需在每处手动检查标志位。
+    """
+
+
 class JobRunner:
     """任务执行引擎。
 
@@ -35,6 +43,21 @@ class JobRunner:
         self._buffers: dict[str, list[str]] = {}
         # 任务完成标志：job_id → bool
         self._done: dict[str, bool] = {}
+        # 当前运行的 AiderRunner 实例（用于取消）
+        self._current_aider: AiderRunner | None = None
+        # 被手动取消的任务 ID 集合；_checkpoint() 据此决定是否抛出 JobCancelledError
+        self._cancelled: set[str] = set()
+
+    # ── 内部工具 ──────────────────────────────────────────────
+
+    def _checkpoint(self, job_id: str) -> None:
+        """取消检查点：若任务已被取消则抛出 JobCancelledError。
+
+        在 _run() 的关键节点调用一次，异常会自动展开后续所有步骤，
+        无需在每个分支重复判断标志位。
+        """
+        if job_id in self._cancelled:
+            raise JobCancelledError(job_id)
         LOG_DIR.mkdir(parents=True, exist_ok=True)
 
     # ── 公开接口 ──────────────────────────────────────────────
@@ -61,12 +84,35 @@ class JobRunner:
             return lines[offset:]
         return []
 
+    def delete_job(self, job_id: str) -> None:
+        """删除任务记录及其磁盘日志文件。运行中的任务不允许删除。"""
+        job = self.store.get(job_id)
+        if job and job.status == "running":
+            raise RuntimeError("运行中的任务不能删除，请先停止")
+        self.store.delete(job_id)
+        log_file = LOG_DIR / f"{job_id}.log"
+        if log_file.exists():
+            log_file.unlink()
+        self._buffers.pop(job_id, None)
+        self._done.pop(job_id, None)
+        self._cancelled.discard(job_id)
+
+    def cancel(self, job_id: str) -> None:
+        """强制终止运行中的任务。"""
+        # 先标记，再杀进程——_run() 检测到标记后不会再覆盖状态
+        self._cancelled.add(job_id)
+        if self._current_aider:
+            self._current_aider.cancel()
+        self.store.update(job_id, status="stopped", error_msg="用户手动停止",
+                          finished_at=datetime.now().isoformat(timespec="seconds"))
+        self._done[job_id] = True
+
     def is_done(self, job_id: str) -> bool:
         """任务是否已结束（成功/失败/不存在）。"""
         if job_id in self._done:
             return self._done[job_id]
         job = self.store.get(job_id)
-        return job is None or job.status in ("success", "failed")
+        return job is None or job.status in ("success", "failed", "stopped")
 
     # ── 内部实现 ──────────────────────────────────────────────
 
@@ -120,7 +166,13 @@ class JobRunner:
                 api_key=cfg.aider.api_key,
                 context_tokens=cfg.aider.context_tokens,
             )
+            self._current_aider = aider
             fix_ok = aider.run(error_message, log_fn=log)
+            self._current_aider = None
+
+            # Aider 结束后立即检查是否被取消——若是，则抛出异常统一处理，
+            # 无需在 if not fix_ok 及后续每个分支重复判断标志位
+            self._checkpoint(job_id)
 
             if not fix_ok:
                 log("✗ Aider 未能完成修复，流程终止")
@@ -187,6 +239,9 @@ class JobRunner:
             log("─" * 40)
             log(f"✅ 流程全部完成  用时 {elapsed}")
 
+        except JobCancelledError:
+            pass  # 状态已由 cancel() 写入，无需重复处理
+
         except Exception as exc:
             log(f"[错误] {exc}")
             for tb_line in traceback.format_exc().splitlines():
@@ -197,4 +252,5 @@ class JobRunner:
             self.store.update(job_id, status="failed", error_msg=str(exc), finished_at=finished)
 
         finally:
+            self._current_aider = None
             self._done[job_id] = True

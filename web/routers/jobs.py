@@ -74,6 +74,29 @@ async def get_job(job_id: str, request: Request):
     return _job_dict(job)
 
 
+@router.delete("/{job_id}")
+async def delete_job(job_id: str, request: Request):
+    """删除任务记录及其日志文件。运行中任务不可删除。"""
+    try:
+        _runner(request).delete_job(job_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return {"ok": True}
+
+
+@router.post("/{job_id}/cancel")
+async def cancel_job(job_id: str, request: Request):
+    """强制终止运行中的任务。"""
+    runner = _runner(request)
+    job = runner.store.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    if job.status != "running":
+        raise HTTPException(status_code=409, detail="任务未在运行中")
+    runner.cancel(job_id)
+    return {"ok": True}
+
+
 @router.get("/{job_id}/logs")
 async def get_job_logs(job_id: str, request: Request, offset: int = 0):
     """一次性返回任务的全部（或从 offset 起的）日志行（JSON 数组）。"""
