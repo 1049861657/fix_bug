@@ -1,0 +1,51 @@
+<!-- ══════════════════════════════════════════════
+     Modal：日志 / 报告查看
+══════════════════════════════════════════════ -->
+<div x-show="modal.open" @keydown.escape.window="modal.open=false"
+     class="fixed inset-0 z-50 flex items-center justify-center p-4">
+
+  <!-- 背景遮罩 -->
+  <div class="absolute inset-0 bg-black/30 backdrop-blur-sm" @click="modal.open=false"></div>
+
+  <!-- 弹窗 -->
+  <div class="relative w-full max-w-4xl bg-white rounded-xl shadow-2xl flex flex-col" style="max-height:85vh">
+
+    <!-- 标题栏 -->
+    <div class="flex items-center justify-between px-5 py-3.5 border-b border-slate-100 shrink-0">
+      <span class="text-sm font-semibold text-slate-700" x-text="modal.title"></span>
+      <button @click="modal.open=false"
+              class="w-6 h-6 flex items-center justify-center rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600 text-lg leading-none transition-colors">×</button>
+    </div>
+
+    <!-- 内容区 -->
+    <div class="flex-1 overflow-y-auto">
+
+      <!-- 日志模式 -->
+      <template x-if="modal.mode==='log'">
+        <div class="p-4 font-mono text-xs space-y-0 bg-slate-50 min-h-full">
+          <template x-if="!modal.lines.length">
+            <div class="text-slate-300">暂无日志</div>
+          </template>
+          <template x-for="(line, i) in modal.lines" :key="i">
+            <div class="log-wrap"
+                 :class="{
+                   'log-step': line.startsWith('Step '),
+                   'log-ok':   line.startsWith('✓') || line.startsWith('✅'),
+                   'log-err':  line.startsWith('✗') || line.startsWith('❌') || line.startsWith('[错误]') || line.includes('[ERROR]'),
+                   'log-warn': line.includes('[WARN]') || line.startsWith('PR 创建失败'),
+                   'log-sep':  line.startsWith('─') || line.startsWith('▶'),
+                   'text-slate-600': true,
+                 }"
+                 x-text="line || '\u00a0'"></div>
+          </template>
+        </div>
+      </template>
+
+      <!-- 报告模式 -->
+      <template x-if="modal.mode==='report'">
+        <div class="prose-md p-6 text-sm" x-html="modal.html"></div>
+      </template>
+
+    </div>
+  </div>
+</div>

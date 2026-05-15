@@ -1,5 +1,7 @@
-# 密钥
+# 密钥（明文存储在 yaml 中，不要提交）
 .env
+aider.yaml
+config/
 
 # IDE
 .idea/
@@ -21,6 +23,7 @@ build/
 # 本工具输出
 reports/
 *.log
+*.db
 
 # Aider 生成文件
 .aider*

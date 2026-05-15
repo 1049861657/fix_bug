@@ -91,7 +91,10 @@ class JobRunner:
         log(f"▶ 任务启动  id={job_id}")
 
         try:
-            cfg = load_config(config_path)
+            # config_path 来自前端，仅含文件名（如 python.yaml）；
+            # load_config 需要相对于项目根目录的路径
+            cfg_path = Path("config") / Path(config_path).name
+            cfg = load_config(cfg_path)
             error_message = filter_stack(error_message, cfg.aider.stack_filter)
 
             # ── Step 1: 创建分支 ──────────────────────────────

@@ -1,0 +1,87 @@
+<!-- ══════════════════════════════════════════════
+     历史记录 Tab
+══════════════════════════════════════════════ -->
+<div x-show="tab==='history'" class="flex-1 overflow-y-auto bg-slate-50">
+  <div class="max-w-5xl mx-auto p-5 space-y-6">
+
+    <!-- 历史任务列表 -->
+    <div>
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider">历史任务</h2>
+        <button @click="loadJobs(); loadReports()" class="text-xs text-blue-600 hover:text-blue-700">↺ 刷新</button>
+      </div>
+
+      <div class="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm">
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="border-b border-slate-100 text-slate-400 text-left">
+              <th class="px-4 py-2.5 font-medium">时间</th>
+              <th class="px-4 py-2.5 font-medium">状态</th>
+              <th class="px-4 py-2.5 font-medium">用时</th>
+              <th class="px-4 py-2.5 font-medium">配置</th>
+              <th class="px-4 py-2.5 font-medium">分支</th>
+              <th class="px-4 py-2.5 font-medium">PR</th>
+              <th class="px-4 py-2.5 font-medium text-right">日志</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-50">
+            <template x-if="!jobs.length">
+              <tr><td colspan="7" class="px-4 py-8 text-center text-slate-300">暂无任务记录</td></tr>
+            </template>
+            <template x-for="job in jobs" :key="job.id">
+              <tr class="hover:bg-slate-50 transition-colors">
+                <td class="px-4 py-2.5 text-slate-500 font-mono" x-text="job.created_at.replace('T',' ')"></td>
+                <td class="px-4 py-2.5">
+                  <span :class="'status-'+job.status"
+                        class="inline-block px-2 py-0.5 rounded-full text-[11px] font-medium"
+                        x-text="{success:'✅ 成功', failed:'❌ 失败', running:'⟳ 运行中', pending:'⏳ 等待'}[job.status]"></span>
+                </td>
+                <td class="px-4 py-2.5 font-mono text-slate-500 tabular-nums"
+                    x-text="job.duration_s != null ? fmtDuration(job.duration_s) : '—'"></td>
+                <td class="px-4 py-2.5 text-slate-600" x-text="job.config_path?.replace(/\.yaml$/, '')"></td>
+                <td class="px-4 py-2.5 font-mono text-slate-500 max-w-[200px] truncate" x-text="job.branch || '—'"></td>
+                <td class="px-4 py-2.5">
+                  <a x-show="job.pr_url" :href="job.pr_url" target="_blank"
+                     class="text-blue-600 hover:underline">链接</a>
+                  <span x-show="!job.pr_url" class="text-slate-300">—</span>
+                </td>
+                <td class="px-4 py-2.5 text-right">
+                  <button @click="viewJobLogs(job)" class="text-blue-600 hover:text-blue-700 text-xs">查看</button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 修复报告列表 -->
+    <div>
+      <h2 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">修复报告</h2>
+      <div class="bg-white rounded-lg border border-slate-200 overflow-hidden shadow-sm">
+        <table class="w-full text-xs">
+          <thead>
+            <tr class="border-b border-slate-100 text-slate-400 text-left">
+              <th class="px-4 py-2.5 font-medium">文件名</th>
+              <th class="px-4 py-2.5 font-medium text-right">操作</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-50">
+            <template x-if="!reports.length">
+              <tr><td colspan="2" class="px-4 py-8 text-center text-slate-300">暂无报告</td></tr>
+            </template>
+            <template x-for="r in reports" :key="r.id">
+              <tr class="hover:bg-slate-50 transition-colors">
+                <td class="px-4 py-2.5 text-slate-600 font-mono" x-text="r.name"></td>
+                <td class="px-4 py-2.5 text-right">
+                  <button @click="viewReport(r.id)" class="text-blue-600 hover:text-blue-700">查看</button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+</div>

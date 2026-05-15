@@ -3,15 +3,18 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 from web.core.job_runner import JobRunner
 from web.core.job_store import JobStore
 from web.routers import configs, jobs, stream
 
 _STATIC_DIR = Path(__file__).parent / "static"
+_TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+templates = Jinja2Templates(directory=str(_TEMPLATES_DIR))
 
 
 @asynccontextmanager
@@ -36,5 +39,5 @@ app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
 
 @app.get("/", include_in_schema=False)
-async def index():
-    return FileResponse(_STATIC_DIR / "index.html")
+async def index(request: Request):
+    return templates.TemplateResponse(request, "base.html")

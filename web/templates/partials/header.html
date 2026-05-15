@@ -1,0 +1,24 @@
+<!-- ── 顶栏 ──────────────────────────────────────────────────────────── -->
+<header class="shrink-0 bg-white border-b border-slate-200 px-4 h-11 flex items-center gap-3 shadow-sm z-10">
+  <span class="font-bold text-blue-600 tracking-tight">fix-bug</span>
+  <span class="text-slate-400 text-xs hidden sm:inline">自动 Bug 修复工具</span>
+
+  <nav class="ml-auto flex gap-0.5">
+    <button @click="tab='new'"
+            :class="tab==='new' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'"
+            class="px-3 py-1.5 rounded text-xs transition-colors">新建任务</button>
+
+    <button @click="switchHistory()"
+            :class="tab==='history' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'"
+            class="px-3 py-1.5 rounded text-xs transition-colors flex items-center gap-1.5">
+      历史记录
+      <span x-show="jobs.length"
+            class="bg-slate-200 text-slate-600 rounded-full px-1.5 py-0 text-[10px] leading-4"
+            x-text="jobs.length"></span>
+    </button>
+
+    <button @click="switchConfig()"
+            :class="tab==='config' ? 'bg-blue-50 text-blue-700 font-medium' : 'text-slate-500 hover:text-slate-700 hover:bg-slate-100'"
+            class="px-3 py-1.5 rounded text-xs transition-colors">配置管理</button>
+  </nav>
+</header>

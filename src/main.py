@@ -26,13 +26,23 @@ def cli() -> None:
 
 @cli.command()
 @click.argument("test_file", type=click.Path(exists=True))
-@click.option("--config", "-c", default="config.yaml", show_default=True, help="配置文件路径")
+@click.option("--config", "-c", default="config/python.yaml", show_default=True, help="项目配置文件路径（config/ 目录下）")
 def verify(test_file: str, config: str) -> None:
     """将外部测试文件复制到目标仓库 tests/ 并运行，验证 bug 是否已修复。"""
     import shutil
 
+    from git import Repo
+
     cfg = load_config(config)
     ensure_repo(cfg.git.repo_path, cfg.git.repo_url)
+
+    repo = Repo(cfg.git.repo_path)
+    console.print(f"[cyan]正在拉取最新代码 ({cfg.git.base_branch})...[/cyan]")
+    origin = repo.remotes[cfg.git.remote]
+    origin.fetch()
+    repo.heads[cfg.git.base_branch].checkout()
+    origin.pull()
+    console.print(f"[green]✓ 已更新至最新[/green]")
 
     repo_tests_dir = Path(cfg.git.repo_path) / "tests"
     repo_tests_dir.mkdir(exist_ok=True)
@@ -54,7 +64,7 @@ def verify(test_file: str, config: str) -> None:
 @cli.command()
 @click.option("--message", "-m", help="直接传入报错信息（字符串）")
 @click.option("--log-file", "-f", type=click.Path(exists=True), help="报错日志文件路径")
-@click.option("--config", "-c", default="config.yaml", show_default=True, help="配置文件路径")
+@click.option("--config", "-c", default="config/python.yaml", show_default=True, help="项目配置文件路径（config/ 目录下）")
 @click.option("--dry-run", is_flag=True, default=False, help="只运行 Aider，不推送分支和创建 PR")
 def run(message: str | None, log_file: str | None, config: str, dry_run: bool) -> None:
     """接收报错信息，自动修复 Bug 并提交 PR。"""
