@@ -9,10 +9,12 @@ from pathlib import Path
 
 from src.aider_runner import AiderRunner
 from src.config import load_config
-from src.git_manager import GitManager, ensure_repo
+from src.git_manager import GitManager, build_auth_url, ensure_aiderignore, ensure_repo
+from src.module_resolver import inject_module_into_cmd, resolve_module
 from src.notifier import notify_all
-from src.pr_creator import PRCreator
+from src.pr_creator import create_review_request
 from src.test_runner import TestRunner
+from src.test_selector import narrow_test_cmd
 from src.utils import filter_stack
 from web.core.job_store import Job, JobStore
 
@@ -146,8 +148,11 @@ class JobRunner:
             # ── Step 1: 创建分支 ──────────────────────────────
             log("─" * 40)
             log("Step 1 · 创建分支")
-            ensure_repo(cfg.git.repo_path, cfg.git.repo_url)
-            git = GitManager(cfg.git.repo_path, cfg.git.remote, cfg.git.base_branch)
+            token = cfg.git.gitlab_token if cfg.git.platform == "gitlab" else cfg.git.github_token
+            auth_url = build_auth_url(cfg.git.repo_url, cfg.git.platform, token)
+            ensure_repo(cfg.git.repo_path, cfg.git.repo_url, auth_url, cfg.git.git_proxy)
+            ensure_aiderignore(cfg.git.repo_path)
+            git = GitManager(cfg.git.repo_path, cfg.git.remote, cfg.git.base_branch, cfg.git.git_proxy)
             branch_name = git.create_fix_branch()
             log(f"✓ 分支已创建: {branch_name}")
             self.store.update(job_id, branch=branch_name)
@@ -155,12 +160,23 @@ class JobRunner:
             # ── Step 2: Aider 修复 ────────────────────────────
             log("─" * 40)
             log("Step 2 · AI 修复")
+            resolved_mod = resolve_module(cfg.git.repo_path, error_message, cfg.aider.stack_filter)
+            effective_test_cmd = cfg.aider.test_cmd
+            effective_test_dir = cfg.aider.test_dir
+            if resolved_mod and resolved_mod.name != ".":
+                effective_test_cmd = inject_module_into_cmd(effective_test_cmd, resolved_mod.name)
+                if not effective_test_dir or effective_test_dir.strip("/") == "src/test/java":
+                    effective_test_dir = resolved_mod.test_dir_with_package
+                log(f"已定位模块: {resolved_mod.name}  测试目录: {effective_test_dir}")
+            elif not effective_test_dir:
+                effective_test_dir = "src/test/java/"
+
             aider = AiderRunner(
                 repo_path=cfg.git.repo_path,
                 model=cfg.aider.model,
-                test_cmd=cfg.aider.test_cmd,
+                test_cmd=effective_test_cmd,
                 test_framework=cfg.aider.test_framework,
-                test_dir=cfg.aider.test_dir,
+                test_dir=effective_test_dir,
                 cmd_dir=cfg.aider.cmd_dir,
                 api_base=cfg.aider.api_base,
                 api_key=cfg.aider.api_key,
@@ -183,7 +199,14 @@ class JobRunner:
             # ── Step 3: 验证测试 ──────────────────────────────
             log("─" * 40)
             log("Step 3 · 验证测试")
-            tester = TestRunner(cfg.git.repo_path, aider.test_cmd)
+            new_tests = git.added_test_classes()
+            if new_tests:
+                verify_cmd = narrow_test_cmd(aider.test_cmd, new_tests)
+                log(f"detected {len(new_tests)} new test class(es), narrowing verify cmd")
+            else:
+                verify_cmd = aider.test_cmd
+                log("no new test class detected, fallback to full test_cmd")
+            tester = TestRunner(cfg.git.repo_path, verify_cmd)
             test_passed, output = tester.run()
 
             if not test_passed:
@@ -192,7 +215,7 @@ class JobRunner:
                     log(out_line)
                 notify_all(
                     branch_name=branch_name, pr_url="",
-                    error_summary=error_message[:300], test_passed=False,
+                    error_summary=error_message, test_passed=False,
                     project_name=cfg.git.repo_name,
                 )
                 self.store.update(job_id, status="failed", error_msg="测试验证失败")
@@ -202,25 +225,23 @@ class JobRunner:
             # ── Step 4: 推送分支 ──────────────────────────────
             log("─" * 40)
             log("Step 4 · 推送分支")
-            if git.has_commits_ahead():
+            has_new = git.has_commits_ahead()
+            if has_new:
                 git.push_branch()
                 log("✓ 分支已推送")
             else:
-                log("分支无新提交，跳过推送")
+                log("分支无新提交，跳过推送与 PR 创建")
 
-            # ── Step 5: 创建 PR ───────────────────────────────
-            log("─" * 40)
-            log("Step 5 · 创建 PR")
             pr_url = ""
-            if cfg.git.github_token and cfg.git.repo_slug:
+            if has_new:
+                log("─" * 40)
+                log("Step 5 · 创建 PR")
                 try:
-                    pr_creator = PRCreator(cfg.git.github_token, cfg.git.repo_slug)
-                    pr_url = pr_creator.create(branch_name, cfg.git.base_branch, error_message)
-                    log(f"✓ PR 已创建: {pr_url}")
+                    pr_url = create_review_request(cfg.git, branch_name, cfg.git.base_branch, error_message)
+                    if pr_url:
+                        log(f"✓ PR 已创建: {pr_url}")
                 except Exception as exc:
                     log(f"PR 创建失败（可手动创建）: {exc}")
-            else:
-                log("GitHub token 未配置，跳过 PR 创建")
             self.store.update(job_id, pr_url=pr_url)
 
             # ── Step 6: 生成报告 ──────────────────────────────
@@ -228,7 +249,7 @@ class JobRunner:
             log("Step 6 · 生成报告")
             notify_all(
                 branch_name=branch_name, pr_url=pr_url,
-                error_summary=error_message[:300], test_passed=True,
+                error_summary=error_message, test_passed=True,
                 project_name=cfg.git.repo_name,
             )
             log(f"✓ Markdown 报告已生成至 reports/{cfg.git.repo_name}/")

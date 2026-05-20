@@ -46,7 +46,13 @@ class GitSection(BaseModel):
     clone_base_dir: str = r"D:\fixRepo"
     remote: str = "origin"
     base_branch: str = "main"
+    # platform: "github" | "gitlab"
+    platform: str = "github"
     github_token: str = ""
+    # GitLab 专用字段
+    gitlab_token: str = ""
+    # 代理地址（外网仓库如 GitHub 填写，内网 GitLab 留空）
+    git_proxy: str = ""
 
 
 class ProjectConfig(BaseModel):
@@ -138,7 +144,10 @@ async def get_config(filename: str):
             clone_base_dir=git_raw.get("clone_base_dir", r"D:\fixRepo"),
             remote=git_raw.get("remote", "origin"),
             base_branch=git_raw.get("base_branch", "main"),
+            platform=git_raw.get("platform", "github"),
             github_token=git_raw.get("github_token", ""),
+            gitlab_token=git_raw.get("gitlab_token", ""),
+            git_proxy=git_raw.get("git_proxy", ""),
         ),
         test=TestSection(
             cmd=test_raw.get("cmd", td["cmd"]),
@@ -159,9 +168,14 @@ async def save_config(filename: str, body: ProjectConfig):
         "clone_base_dir": body.git.clone_base_dir,
         "remote": body.git.remote,
         "base_branch": body.git.base_branch,
+        "platform": body.git.platform,
     }
     if body.git.github_token:
         git_dict["github_token"] = body.git.github_token
+    if body.git.gitlab_token:
+        git_dict["gitlab_token"] = body.git.gitlab_token
+    if body.git.git_proxy:
+        git_dict["git_proxy"] = body.git.git_proxy
 
     test_dict: dict = {
         "cmd": body.test.cmd,

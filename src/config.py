@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlparse
 
 import yaml
 
@@ -20,12 +21,15 @@ class AiderConfig:
     test_dir: str = "tests/"
     cmd_dir: str = ""
     stack_filter: str = ""
+    java_home: str = ""   # 指定 JDK 路径，留空使用系统默认
 
 
 # 各语言的测试默认值，供 load_config 在 test 节缺省时使用
+# 注意 dir 留空：多模块项目由 module_resolver 推导为 <module>/src/test/java/；
+# 单模块由 main 流程兜底为 src/test/java/
 _TYPE_DEFAULTS: dict[str, dict] = {
     "python": {"cmd": "pytest tests/ -x -q", "framework": "pytest", "dir": "tests/"},
-    "java":   {"cmd": "mvn test -q --no-transfer-progress", "framework": "JUnit 5", "dir": "src/test/java/"},
+    "java":   {"cmd": "mvn test -q --no-transfer-progress", "framework": "JUnit 5", "dir": ""},
 }
 
 
@@ -35,7 +39,13 @@ class GitConfig:
     clone_base_dir: str = r"D:\fixRepo"
     remote: str = "origin"
     base_branch: str = "main"
+    # platform: "github" | "gitlab"
+    platform: str = "github"
     github_token: str = ""
+    # GitLab 专用字段
+    gitlab_token: str = ""
+    # 代理地址（仅需访问外网的仓库填写，如 GitHub；内网 GitLab 留空）
+    git_proxy: str = ""
 
     @property
     def repo_name(self) -> str:
@@ -51,7 +61,24 @@ class GitConfig:
 
     @property
     def repo_slug(self) -> str:
-        parts = self.repo_url.rstrip("/").removesuffix(".git").split("/")
+        """返回仓库路径（去掉 host 部分）。
+        GitHub:  https://github.com/org/repo      → org/repo
+        GitLab EE: https://gitlab.co/g/sub/repo  → g/sub/repo
+        SSH:     git@host:group/sub/repo.git      → group/sub/repo
+        """
+        url = self.repo_url.rstrip("/").removesuffix(".git")
+        if not url:
+            return ""
+        try:
+            parsed = urlparse(url)
+            if parsed.scheme in ("http", "https"):
+                return parsed.path.lstrip("/")
+            # SSH 格式：git@host:path
+            if ":" in url:
+                return url.split(":", 1)[-1]
+        except Exception:
+            pass
+        parts = url.split("/")
         return f"{parts[-2]}/{parts[-1]}" if len(parts) >= 2 else ""
 
 
@@ -105,6 +132,9 @@ def load_config(path: str | Path = _CONFIG_DIR / "python.yaml",
             clone_base_dir=git_raw.get("clone_base_dir", r"D:\fixRepo"),
             remote=git_raw.get("remote", "origin"),
             base_branch=git_raw.get("base_branch", "main"),
+            platform=git_raw.get("platform", "github"),
             github_token=git_raw.get("github_token", ""),
+            gitlab_token=git_raw.get("gitlab_token", ""),
+            git_proxy=git_raw.get("git_proxy", ""),
         ),
     )
